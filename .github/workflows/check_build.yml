@@ -1,6 +1,8 @@
 name: Check rustc_codegen_c Build
 
 on:
+  push:
+    branches: [ "master" ]
   pull_request:
     branches: [ "master" ]
 
