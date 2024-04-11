@@ -1,0 +1,24 @@
+name: Check rustc_codegen_c Build
+
+on:
+  pull_request:
+    branches: [ "master" ]
+
+jobs:
+  linux_build:
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v3
+    - name: Linux Build Check
+      run: |
+        cd compiler/rustc_codegen_c
+        make build
+      
+  windows_build:
+    runs-on: windows-latest
+    steps:
+    - uses: actions/checkout@v3
+    - name: Windows Build Check
+      run: |
+        cd compiler/rustc_codegen_c
+        make build

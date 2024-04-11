@@ -1,0 +1,15 @@
+[package]
+name = "rustc_codegen_c"
+version = "0.1.0"
+edition = "2021"
+
+[lib]
+crate-type=["dylib"]
+
+[dependencies]
+# tidy-alphabetical-start
+tracing = "0.1.40"
+# tidy-alphabetical-end
+
+[package.metadata.rust-analyzer]
+rustc_private = true
