@@ -19,6 +19,10 @@ use rustc_session::Session;
 use std::{any::Any, path::Path};
 
 mod base;
+mod function;
+mod prefix;
+mod ty;
+mod write;
 
 pub struct CCodegenBackend(());
 
