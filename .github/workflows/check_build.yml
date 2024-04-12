@@ -2,9 +2,9 @@ name: Check rustc_codegen_c Build
 
 on:
   push:
-    branches: [ "master" ]
+    branches: [ "main" ]
   pull_request:
-    branches: [ "master" ]
+    branches: [ "main" ]
 
 jobs:
   linux_build:
