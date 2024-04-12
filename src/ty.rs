@@ -26,6 +26,8 @@ pub enum CType {
     FunctionPtr(Box<CType>, Vec<CType>),
 }
 
+pub const NAME_TOKEN: &str = "<<name>>";
+
 impl fmt::Display for CType {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
@@ -47,10 +49,10 @@ impl fmt::Display for CType {
             CType::Struct => write!(f, "struct"),
             CType::Union => write!(f, "union"),
             CType::Enum => write!(f, "enum"),
-            CType::Pointer(ty) => write!(f, "*{}", ty),
-            CType::Array(ty, size) => write!(f, "{}[{}]", ty, size),
+            CType::Pointer(ty) => write!(f, "{}*", ty),
+            CType::Array(ty, size) => write!(f, "{} {}[{}]", ty, NAME_TOKEN, size),
             CType::FunctionPtr(ty, args) => {
-                write!(f, "{}*(", ty)?;
+                write!(f, "{} (*{}", ty, NAME_TOKEN)?;
                 for (i, arg) in args.iter().enumerate() {
                     if i > 0 {
                         write!(f, ", ")?;

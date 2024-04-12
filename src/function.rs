@@ -1,5 +1,6 @@
 use crate::base::OngoingCodegen;
 use crate::ty::CType;
+use crate::ty::NAME_TOKEN;
 use rustc_middle::{
     mir::{BasicBlockData, Rvalue, StatementKind},
     ty::{print::with_no_trimmed_paths, Instance},
@@ -15,7 +16,12 @@ pub struct CArg {
 
 impl fmt::Display for CArg {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "{} {}", self.ty, self.name)
+        match self.ty {
+            CType::Array(_, _) | CType::FunctionPtr(_, _) => {
+                write!(f, "{}", format!("{}", self.ty).replace(NAME_TOKEN, &self.name))
+            }
+            _ => write!(f, "{} {}", self.ty, self.name),
+        }
     }
 }
 
@@ -23,6 +29,7 @@ impl fmt::Display for CArg {
 pub struct CFunction {
     name: String,
     signature: Vec<CArg>,
+    body: FnBody,
     return_ty: CType,
 }
 
@@ -30,6 +37,11 @@ impl CFunction {
     pub fn is_main(&self) -> bool {
         self.name == "main"
     }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct FnBody {
+    body: String,
 }
 
 impl fmt::Display for CFunction {
