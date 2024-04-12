@@ -50,7 +50,13 @@ impl fmt::Display for CType {
             CType::Union => write!(f, "union"),
             CType::Enum => write!(f, "enum"),
             CType::Pointer(ty) => write!(f, "{}*", ty),
-            CType::Array(ty, size) => write!(f, "{} {}[{}]", ty, NAME_TOKEN, size),
+            CType::Array(ty, size) => {
+                if *size as u32 == 0 {
+                    write!(f, "{} {}[]", ty, NAME_TOKEN)
+                } else {
+                    write!(f, "{} {}[{}]", ty, NAME_TOKEN, size)
+                }
+            }
             CType::FunctionPtr(ty, args) => {
                 write!(f, "{} (*{}", ty, NAME_TOKEN)?;
                 for (i, arg) in args.iter().enumerate() {

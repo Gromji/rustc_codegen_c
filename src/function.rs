@@ -1,6 +1,6 @@
 use crate::base::OngoingCodegen;
+use crate::definition::CVarDef;
 use crate::ty::CType;
-use crate::ty::NAME_TOKEN;
 use rustc_middle::{
     mir::{BasicBlockData, Rvalue, StatementKind},
     ty::{print::with_no_trimmed_paths, Instance},
@@ -9,39 +9,76 @@ use std::fmt;
 use std::io::Write;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct CArg {
-    name: String,
-    ty: CType,
-}
-
-impl fmt::Display for CArg {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match self.ty {
-            CType::Array(_, _) | CType::FunctionPtr(_, _) => {
-                write!(f, "{}", format!("{}", self.ty).replace(NAME_TOKEN, &self.name))
-            }
-            _ => write!(f, "{} {}", self.ty, self.name),
-        }
-    }
-}
-
-#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct CFunction {
     name: String,
-    signature: Vec<CArg>,
+    signature: Vec<CVarDef>,
     body: FnBody,
     return_ty: CType,
 }
 
 impl CFunction {
+    pub fn new(name: String, signature: Vec<CVarDef>, return_ty: CType) -> Self {
+        Self { name, signature, body: FnBody::new(String::new()), return_ty }
+    }
+
     pub fn is_main(&self) -> bool {
         self.name == "main"
+    }
+
+    pub fn push(&mut self, line: &str, newline: bool, indent: usize) {
+        self.body.push(line, newline, indent);
+    }
+
+    pub fn as_prototype(&self) -> String {
+        let mut prototype = format!("{} {}(", self.return_ty, self.name);
+        for (i, arg) in self.signature.iter().enumerate() {
+            if i > 0 {
+                prototype.push_str(", ");
+            }
+            prototype.push_str(&arg.to_string());
+        }
+        prototype.push_str(");");
+        prototype
+    }
+
+    #[allow(dead_code)]
+    pub fn validate_fn(&self) -> bool {
+        todo!("TODO: Would be a good idea to have some kind of validation")
     }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct FnBody {
     body: String,
+}
+
+impl fmt::Display for FnBody {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{{\n {} \n}}\n\n", self.body)
+    }
+}
+
+impl FnBody {
+    pub fn new(body: String) -> Self {
+        Self { body }
+    }
+
+    #[allow(dead_code)]
+    pub fn is_empty(&self) -> bool {
+        self.body.is_empty()
+    }
+
+    pub fn push(&mut self, line: &str, newline: bool, indent: usize) {
+        self.body.push_str(&("    ".repeat(indent) + line));
+        if newline {
+            self.body.push('\n');
+        }
+    }
+
+    #[allow(dead_code)]
+    pub fn clear(&mut self) {
+        self.body.clear();
+    }
 }
 
 impl fmt::Display for CFunction {
@@ -53,7 +90,9 @@ impl fmt::Display for CFunction {
             }
             write!(f, "{}", arg)?;
         }
-        write!(f, ") {{\n}}")
+        write!(f, ") ")?;
+
+        write!(f, "{}", self.body)
     }
 }
 

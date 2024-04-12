@@ -14,35 +14,52 @@ extern crate rustc_target;
 extern crate rustc_ty_utils;
 extern crate stable_mir;
 
+use core::panic;
+
 use rustc_codegen_ssa::{CodegenResults, CompiledModule, CrateInfo};
 use rustc_metadata::EncodedMetadata;
 use rustc_middle::mir::mono::{CodegenUnit, MonoItem};
 use rustc_session::config::{OutputFilenames, OutputType};
 
 use crate::function;
+use crate::include;
 use crate::prefix;
+use crate::structure;
 use crate::write;
 
 pub struct Context {
-    prefix_code: prefix::Prefix,
+    includes: Vec<include::Include>,
     functions: Vec<function::CFunction>,
+    structs: Vec<structure::CStruct>,
 }
 
 impl Context {
     pub fn new() -> Self {
-        Self { prefix_code: prefix::Prefix::new(), functions: Vec::new() }
+        Self { includes: Vec::new(), functions: Vec::new(), structs: Vec::new() }
     }
 
-    pub fn get_mut_prefix(&mut self) -> &mut prefix::Prefix {
-        &mut self.prefix_code
+    pub fn get_includes(&self) -> &Vec<include::Include> {
+        &self.includes
     }
 
-    pub fn get_prefix(&self) -> &prefix::Prefix {
-        &self.prefix_code
+    pub fn get_mut_includes(&mut self) -> &mut Vec<include::Include> {
+        &mut self.includes
     }
 
     pub fn get_functions(&self) -> &Vec<function::CFunction> {
         &self.functions
+    }
+
+    pub fn get_mut_functions(&mut self) -> &mut Vec<function::CFunction> {
+        &mut self.functions
+    }
+
+    pub fn get_structs(&self) -> &Vec<structure::CStruct> {
+        &self.structs
+    }
+
+    pub fn get_mut_structs(&mut self) -> &mut Vec<structure::CStruct> {
+        &mut self.structs
     }
 }
 
@@ -63,7 +80,11 @@ impl OngoingCodegen {
 
         let mut file = std::fs::File::create(&path).unwrap();
 
-        write::write_prefix(ongoing_codegen.context.get_prefix(), &mut file);
+        write::write_includes(ongoing_codegen.context.get_includes(), &mut file);
+
+        write::write_prototypes(ongoing_codegen.context.get_functions(), &mut file);
+
+        write::write_structs(ongoing_codegen.context.get_structs(), &mut file);
 
         write::write_functions(ongoing_codegen.context.get_functions(), &mut file);
 
@@ -102,13 +123,10 @@ fn transpile_cgu<'tcx>(
                 function::handle_fn(tcx, ongoing_codegen, inst);
             }
             MonoItem::Static(def) => {
-                ongoing_codegen.context.get_mut_prefix().push(&format!("static {:?};", def), true);
+                panic!("Static items are not supported yet: {:?}", def);
             }
             MonoItem::GlobalAsm(item_id) => {
-                ongoing_codegen
-                    .context
-                    .get_mut_prefix()
-                    .push(&format!("asm!(\"{:?}\";", tcx.hir().item(*item_id),), true);
+                panic!("Global asm items are not supported yet: {:?}", item_id);
             }
         }
     }
@@ -122,7 +140,7 @@ pub fn run<'tcx>(
     let mut ongoing_codegen = OngoingCodegen { context: Context::new() };
 
     // Build the prefix code
-    prefix::build_prefix(ongoing_codegen.context.get_mut_prefix());
+    prefix::build_prefix(&mut ongoing_codegen.context);
 
     for cgu in &cgus {
         transpile_cgu(tcx, cgu, &mut ongoing_codegen);

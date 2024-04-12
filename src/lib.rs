@@ -19,8 +19,11 @@ use rustc_session::Session;
 use std::{any::Any, path::Path};
 
 mod base;
+mod definition;
 mod function;
+mod include;
 mod prefix;
+mod structure;
 mod ty;
 mod write;
 
@@ -36,21 +39,19 @@ impl CodegenBackend for CCodegenBackend {
     // We can create a struct to hold the configuration and store it in CCodegenBackend
     fn init(&self, _sess: &Session) {}
 
-    #[allow(unused)]
     fn codegen_crate<'tcx>(
         &self,
         tcx: rustc_middle::ty::TyCtxt<'tcx>,
         metadata: rustc_metadata::EncodedMetadata,
-        need_metadata_module: bool,
+        _need_metadata_module: bool,
     ) -> Box<dyn Any> {
         base::run(tcx, metadata)
     }
 
-    #[allow(unused)]
     fn join_codegen(
         &self,
         ongoing_codegen: Box<dyn Any>,
-        sess: &rustc_session::Session,
+        _sess: &rustc_session::Session,
         outputs: &rustc_session::config::OutputFilenames,
     ) -> (
         rustc_codegen_ssa::CodegenResults,
@@ -68,7 +69,6 @@ impl CodegenBackend for CCodegenBackend {
         )
     }
 
-    #[allow(unused)]
     fn link(
         &self,
         sess: &rustc_session::Session,

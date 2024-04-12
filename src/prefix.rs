@@ -1,59 +1,73 @@
-pub struct Prefix {
-    code: String,
-}
+use crate::base::Context;
+use crate::definition::CVarDef;
+use crate::function::CFunction;
 
-impl Prefix {
-    pub fn new() -> Self {
-        Self { code: String::new() }
-    }
+use crate::include::Include;
+use crate::structure::CStruct;
+use crate::ty::CType;
 
-    pub fn push(&mut self, code: &str, newline: bool) {
-        self.code.push_str(code);
-        if newline {
-            self.code.push_str("\n");
-        }
-    }
-
-    pub fn get_code(&self) -> &str {
-        &self.code
-    }
-}
-
-pub fn build_prefix(prefix: &mut Prefix) {
-    prefix.push(&prefix_includes().as_str(), true);
-    prefix.push(&prefix_functions().as_str(), true);
-    prefix.push(&prefix_structs().as_str(), true);
+pub fn build_prefix(context: &mut Context) {
+    // Includes
+    context.get_mut_includes().append(&mut prefix_includes());
+    // Functions
+    context.get_mut_functions().append(&mut prefix_functions());
+    // Structs
+    context.get_mut_structs().append(&mut prefix_structs());
 }
 
 // Greedy list of includes
-fn prefix_includes() -> String {
-    [
-        "#include <stdio.h>",
-        "#include <stdlib.h>",
-        "#include <math.h>",
-        "#include <string.h>",
-        "#include <ctype.h>",
-        "#include <time.h>",
-        "#include <stddef.h>",
-        "#include <limits.h>",
-        "#include <float.h>",
-        "#include <stdbool.h>",
-        "#include <assert.h>",
-        "#include <errno.h>",
-        "#include <signal.h>",
-        "#include <setjmp.h>",
-        "#include <stdarg.h>",
-        "#include <locale.h>",
-        "#include <wchar.h>",
-        "#include <complex.h>",
+fn prefix_includes() -> Vec<Include> {
+    vec![
+        Include::new("stdio.h".to_string(), true),
+        Include::new("stdlib.h".to_string(), true),
+        Include::new("math.h".to_string(), true),
+        Include::new("string.h".to_string(), true),
+        Include::new("ctype.h".to_string(), true),
+        Include::new("time.h".to_string(), true),
+        Include::new("stddef.h".to_string(), true),
+        Include::new("limits.h".to_string(), true),
+        Include::new("float.h".to_string(), true),
+        Include::new("stdbool.h".to_string(), true),
+        Include::new("assert.h".to_string(), true),
+        Include::new("errno.h".to_string(), true),
+        Include::new("signal.h".to_string(), true),
+        Include::new("setjmp.h".to_string(), true),
+        Include::new("stdarg.h".to_string(), true),
+        Include::new("locale.h".to_string(), true),
+        Include::new("wchar.h".to_string(), true),
+        Include::new("complex.h".to_string(), true),
     ]
-    .join("\n")
 }
 
-fn prefix_functions() -> String {
-    "// TODO: Implement prefix functions here!".to_string()
+// List of starter functions
+fn prefix_functions() -> Vec<CFunction> {
+    let mut functions: Vec<CFunction> = Vec::new();
+
+    let mut main = CFunction::new(
+        "main".to_string(),
+        vec![
+            CVarDef::new("argc".to_string(), CType::Int),
+            CVarDef::new(
+                "argv".to_string(),
+                CType::Array(Box::new(CType::Pointer(Box::new(CType::Char))), 0),
+            ),
+        ],
+        CType::Int,
+    );
+    main.push("return 0;", false, 1);
+
+    functions.push(main);
+
+    functions
 }
 
-fn prefix_structs() -> String {
-    "// TODO: Implement prefix structs here!".to_string()
+// List of starter structs
+fn prefix_structs() -> Vec<CStruct> {
+    // add a dummy struct
+    let mut structs: Vec<CStruct> = Vec::new();
+    let mut dummy_struct = CStruct::new("Dummy".to_string());
+    dummy_struct.push(CVarDef::new("dummy".to_string(), CType::Int));
+    structs.push(dummy_struct);
+
+    structs
 }
