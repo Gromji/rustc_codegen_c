@@ -13,7 +13,7 @@ pub fn write_functions(functions: &Vec<function::CFunction>, file: &mut File) {
     let main_exists = functions.iter().any(|f| f.is_main());
     if !main_exists {
         file.write_all(
-            b"int main() {\
+            b"int main(int argc, char* argv[]) {\
             \n  return 0;\
             \n}\
             \n",
