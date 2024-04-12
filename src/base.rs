@@ -14,41 +14,57 @@ extern crate rustc_target;
 extern crate rustc_ty_utils;
 extern crate stable_mir;
 
+use core::panic;
+
 use rustc_codegen_ssa::{CodegenResults, CompiledModule, CrateInfo};
 use rustc_metadata::EncodedMetadata;
 use rustc_middle::mir::mono::{CodegenUnit, MonoItem};
-use rustc_middle::mir::BasicBlockData;
-use rustc_middle::mir::StatementKind;
-use rustc_middle::mir::{Place, Rvalue};
-use rustc_middle::ty::print::with_no_trimmed_paths;
 use rustc_session::config::{OutputFilenames, OutputType};
-use std::io::Write;
+
+use crate::function;
+use crate::include;
+use crate::prefix;
+use crate::structure;
+use crate::write;
 
 pub struct Context {
-    code: String,
+    includes: Vec<include::Include>,
+    functions: Vec<function::CFunction>,
+    structs: Vec<structure::CStruct>,
 }
 
 impl Context {
     pub fn new() -> Self {
-        Self { code: String::new() }
+        Self { includes: Vec::new(), functions: Vec::new(), structs: Vec::new() }
     }
 
-    pub fn push(&mut self, code: &str) {
-        self.code.push_str(code);
+    pub fn get_includes(&self) -> &Vec<include::Include> {
+        &self.includes
     }
 
-    pub fn push_line(&mut self, code: &str) {
-        self.code.push_str(code);
-        self.code.push_str("\n");
+    pub fn get_mut_includes(&mut self) -> &mut Vec<include::Include> {
+        &mut self.includes
     }
 
-    pub fn get_code(&self) -> &str {
-        &self.code
+    pub fn get_functions(&self) -> &Vec<function::CFunction> {
+        &self.functions
+    }
+
+    pub fn get_mut_functions(&mut self) -> &mut Vec<function::CFunction> {
+        &mut self.functions
+    }
+
+    pub fn get_structs(&self) -> &Vec<structure::CStruct> {
+        &self.structs
+    }
+
+    pub fn get_mut_structs(&mut self) -> &mut Vec<structure::CStruct> {
+        &mut self.structs
     }
 }
 
 pub struct OngoingCodegen {
-    context: Context,
+    pub context: Context,
 }
 
 impl OngoingCodegen {
@@ -62,9 +78,15 @@ impl OngoingCodegen {
     ) -> CodegenResults {
         let path = output_files.temp_path(OutputType::Object, Some(name.as_str()));
 
-        let code = ongoing_codegen.context.get_code();
         let mut file = std::fs::File::create(&path).unwrap();
-        file.write_all(code.as_bytes()).unwrap();
+
+        write::write_includes(ongoing_codegen.context.get_includes(), &mut file);
+
+        write::write_prototypes(ongoing_codegen.context.get_functions(), &mut file);
+
+        write::write_structs(ongoing_codegen.context.get_structs(), &mut file);
+
+        write::write_functions(ongoing_codegen.context.get_functions(), &mut file);
 
         let modules = vec![CompiledModule {
             name: name,
@@ -86,7 +108,6 @@ impl OngoingCodegen {
     }
 }
 
-#[allow(unused_variables)]
 fn transpile_cgu<'tcx>(
     tcx: rustc_middle::ty::TyCtxt<'tcx>,
     cgu: &CodegenUnit<'tcx>,
@@ -99,109 +120,13 @@ fn transpile_cgu<'tcx>(
 
         match item {
             MonoItem::Fn(inst) => {
-                let mir = tcx.instance_mir(inst.def);
-
-                let blocks = &mir.basic_blocks;
-                for (last_bb_id, block_data) in blocks.into_iter().enumerate() {
-                    let block_data: &BasicBlockData = block_data;
-
-                    let statements = &block_data.statements;
-                    with_no_trimmed_paths!({
-                        for stmt in statements {
-                            writeln!(std::io::stdout(), "Statement: {:?}", stmt).unwrap();
-                            writeln!(std::io::stdout(), "Statement Kind: {:?}", stmt.kind).unwrap();
-                            match &stmt.kind {
-                                StatementKind::Assign(val) => {
-                                    let place = &val.0;
-                                    let rvalue = &val.1;
-                                    writeln!(std::io::stdout(), "Place: {:?}", place).unwrap();
-                                    writeln!(std::io::stdout(), "Rvalue: {:?}", rvalue).unwrap();
-
-                                    match rvalue {
-                                        Rvalue::Repeat(operand, len) => {
-                                            writeln!(std::io::stdout(), "Repeat",).unwrap();
-                                        }
-                                        Rvalue::Ref(a, b, c) => {
-                                            writeln!(std::io::stdout(), "Ref",).unwrap();
-                                        }
-                                        Rvalue::ThreadLocalRef(region) => {
-                                            writeln!(std::io::stdout(), "ThreadLocalRef",).unwrap();
-                                        }
-                                        Rvalue::AddressOf(a, b) => {
-                                            writeln!(std::io::stdout(), "AddressOf",).unwrap();
-                                        }
-                                        Rvalue::Len(a) => {
-                                            writeln!(std::io::stdout(), "Len",).unwrap();
-                                        }
-                                        Rvalue::Cast(kind, operand, ty) => {
-                                            writeln!(std::io::stdout(), "Cast",).unwrap();
-                                        }
-                                        Rvalue::BinaryOp(op, operand1) => {
-                                            writeln!(std::io::stdout(), "BinaryOp",).unwrap();
-                                        }
-                                        Rvalue::CheckedBinaryOp(op, operand1) => {
-                                            writeln!(std::io::stdout(), "CheckedBinaryOp",)
-                                                .unwrap();
-                                        }
-                                        Rvalue::NullaryOp(op, ty) => {
-                                            writeln!(std::io::stdout(), "NullaryOp",).unwrap();
-                                        }
-                                        Rvalue::UnaryOp(op, operand) => {
-                                            writeln!(std::io::stdout(), "UnaryOp",).unwrap();
-                                        }
-                                        Rvalue::Discriminant(place) => {
-                                            writeln!(std::io::stdout(), "Discriminant",).unwrap();
-                                        }
-                                        Rvalue::Aggregate(kind, operands) => {
-                                            writeln!(std::io::stdout(), "Aggregate",).unwrap();
-                                        }
-                                        Rvalue::ShallowInitBox(kind, operands) => {
-                                            writeln!(std::io::stdout(), "ShallowInitBox",).unwrap();
-                                        }
-                                        Rvalue::CopyForDeref(kind) => {
-                                            writeln!(std::io::stdout(), "CopyForDeref",).unwrap();
-                                        }
-                                        Rvalue::Use(operand) => match operand.constant() {
-                                            Some(constant) => match constant.const_ {
-                                                rustc_middle::mir::Const::Unevaluated(c, t) => {
-                                                    writeln!(
-                                                        std::io::stdout(),
-                                                        "Const: {:?} {:?}",
-                                                        tcx.const_eval_poly(c.def),
-                                                        t
-                                                    )
-                                                    .unwrap();
-                                                }
-                                                _ => {}
-                                            },
-                                            None => {
-                                                writeln!(std::io::stdout(), "Use: {:?}", operand)
-                                                    .unwrap();
-                                            }
-                                        },
-                                    }
-                                }
-                                _ => {}
-                            }
-                        }
-                    });
-                }
-
-                with_no_trimmed_paths!({
-                    let mut buf = Vec::new();
-
-                    rustc_middle::mir::pretty::write_mir_fn(tcx, mir, &mut |_, _| Ok(()), &mut buf)
-                        .unwrap();
-                    ongoing_codegen.context.push_line(&String::from_utf8_lossy(&buf).into_owned());
-                });
+                function::handle_fn(tcx, ongoing_codegen, inst);
             }
             MonoItem::Static(def) => {
-                ongoing_codegen.context.push_line(&format!("static {:?};", def));
+                panic!("Static items are not supported yet: {:?}", def);
             }
             MonoItem::GlobalAsm(item_id) => {
-                ongoing_codegen
-                    .context
-                    .push_line(&format!("asm!(\"{:?}\";", tcx.hir().item(*item_id),));
+                panic!("Global asm items are not supported yet: {:?}", item_id);
             }
         }
     }
@@ -213,6 +138,9 @@ pub fn run<'tcx>(
 ) -> Box<(String, OngoingCodegen, EncodedMetadata, CrateInfo)> {
     let cgus: Vec<_> = tcx.collect_and_partition_mono_items(()).1.iter().collect();
     let mut ongoing_codegen = OngoingCodegen { context: Context::new() };
+
+    // Build the prefix code
+    prefix::build_prefix(&mut ongoing_codegen.context);
 
     for cgu in &cgus {
         transpile_cgu(tcx, cgu, &mut ongoing_codegen);
