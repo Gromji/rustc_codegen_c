@@ -43,18 +43,14 @@ fn prefix_includes() -> Vec<Include> {
 fn prefix_functions() -> Vec<CFunction> {
     let mut functions: Vec<CFunction> = Vec::new();
 
-    let mut main = CFunction::new(
-        "main".to_string(),
-        vec![
-            CVarDef::new("argc".to_string(), CType::Int),
-            CVarDef::new(
-                "argv".to_string(),
-                CType::Array(Box::new(CType::Pointer(Box::new(CType::Char))), 0),
-            ),
-        ],
-        CType::Int,
-    );
-    main.push("return 0;", false, 1);
+    let mut main = CFunction::new("main".to_string(), CType::Int);
+
+    main.add_signature_var(CVarDef::new("argc".to_string(), CType::Int));
+    main.add_signature_var(CVarDef::new(
+        "argv".to_string(),
+        CType::Array(Box::new(CType::Pointer(Box::new(CType::Char))), 0),
+    ));
+    main.push("return 0;\n", false, 1);
 
     functions.push(main);
 
@@ -63,11 +59,10 @@ fn prefix_functions() -> Vec<CFunction> {
 
 // List of starter structs
 fn prefix_structs() -> Vec<CStruct> {
-    // add a dummy struct
+    // add an unit struct
     let mut structs: Vec<CStruct> = Vec::new();
-    let mut dummy_struct = CStruct::new("Dummy".to_string());
-    dummy_struct.push(CVarDef::new("dummy".to_string(), CType::Int));
-    structs.push(dummy_struct);
+    let mut unit_struct = CStruct::new("__Unit".to_string());
+    structs.push(unit_struct);
 
     structs
 }

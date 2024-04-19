@@ -19,6 +19,7 @@ use core::panic;
 use rustc_codegen_ssa::{CodegenResults, CompiledModule, CrateInfo};
 use rustc_metadata::EncodedMetadata;
 use rustc_middle::mir::mono::{CodegenUnit, MonoItem};
+use rustc_middle::ty::print::with_no_trimmed_paths;
 use rustc_session::config::{OutputFilenames, OutputType};
 
 use crate::function;
@@ -120,7 +121,9 @@ fn transpile_cgu<'tcx>(
 
         match item {
             MonoItem::Fn(inst) => {
-                function::handle_fn(tcx, ongoing_codegen, inst);
+                with_no_trimmed_paths!({
+                    function::handle_fn(tcx, ongoing_codegen, inst);
+                });
             }
             MonoItem::Static(def) => {
                 panic!("Static items are not supported yet: {:?}", def);

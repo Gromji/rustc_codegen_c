@@ -8,6 +8,7 @@ extern crate rustc_metadata;
 extern crate rustc_middle;
 extern crate rustc_session;
 extern crate rustc_span;
+extern crate  rustc_const_eval;
 
 use base::OngoingCodegen;
 
@@ -23,6 +24,7 @@ mod definition;
 mod function;
 mod include;
 mod prefix;
+mod stmt;
 mod structure;
 mod ty;
 mod write;
