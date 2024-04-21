@@ -3,10 +3,10 @@ use crate::stmt::handle_stmt;
 use crate::ty::CType;
 use crate::{base::OngoingCodegen, definition::CVarDecl};
 use rustc_middle::{mir::BasicBlockData, ty::Instance};
-use std::any::Any;
 use std::collections::HashSet;
 use std::fmt;
-use std::io::Write;
+
+use tracing::{debug, trace};
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct CFunction {
@@ -63,7 +63,7 @@ pub struct FnBody {
 
 impl fmt::Display for FnBody {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "{{\n")?;
+    write!(f, "{{\n")?;
         for decl in &self.local_decl {
             write!(f, "    {}\n", decl)?;
         }
@@ -117,11 +117,12 @@ impl fmt::Display for CFunction {
 fn print_mir<'tcx>(tcx: rustc_middle::ty::TyCtxt<'tcx>, mir: &rustc_middle::mir::Body<'tcx>) {
     let mut buf = Vec::new();
     rustc_middle::mir::pretty::write_mir_fn(tcx, mir, &mut |_, _| Ok(()), &mut buf).unwrap();
-    writeln!(std::io::stdout(), "{}", &String::from_utf8_lossy(&buf).into_owned()).unwrap();
+
+    debug!("{}", &String::from_utf8_lossy(&buf).into_owned());
 }
 
 fn handle_decls<'tcx>(
-    ongoing_codegen: &mut OngoingCodegen,
+    _ongoing_codegen: &mut OngoingCodegen,
     mir: &rustc_middle::mir::Body<'tcx>,
     c_fn: &mut CFunction,
 ) {
@@ -171,7 +172,11 @@ fn handle_bbs<'tcx>(
     for (_last_bb_id, block_data) in blocks.into_iter().enumerate() {
         let block_data: &BasicBlockData = block_data;
 
-        let statements = &block_data.statements;
+        let statements: &Vec<rustc_middle::mir::Statement<'_>> = &block_data.statements;
+        
+        // Print basic block for debugging. TODO should probably depend on a cli argument. 
+        c_fn.body.push(&format!("// Basic Block: {:?}", block_data), true, 1);        
+        
         for stmt in statements {
             handle_stmt(tcx, ongoing_codegen, stmt, c_fn);
         }
@@ -192,9 +197,8 @@ pub fn handle_fn<'tcx>(
 
     // Handle local variables
     handle_decls(ongoing_codegen, mir, &mut c_fn);
-
-    // write c_fn to stdout
-    writeln!(std::io::stdout(), "{}", c_fn).unwrap();
+    
+    trace!("{}", c_fn);
 
     // Handle basic blocks
     handle_bbs(tcx, ongoing_codegen, mir, &mut c_fn);

@@ -27,6 +27,7 @@ mod prefix;
 mod stmt;
 mod structure;
 mod ty;
+mod crepr;
 mod write;
 
 pub struct CCodegenBackend(());

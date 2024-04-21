@@ -1,7 +1,10 @@
 use crate::function::CFunction;
-use crate::{base::OngoingCodegen, write};
-use rustc_middle::mir::{Place, Rvalue, StatementKind};
-use std::io::Write;
+use crate::base::OngoingCodegen;
+use rustc_middle::mir::{ConstOperand, Operand, Place, Rvalue, StatementKind};
+
+use tracing::{debug, debug_span, warn};
+
+use crate::crepr::{self, Expression};
 
 pub fn handle_stmt<'tcx>(
     tcx: rustc_middle::ty::TyCtxt<'tcx>,
@@ -9,66 +12,128 @@ pub fn handle_stmt<'tcx>(
     stmt: &rustc_middle::mir::Statement<'tcx>,
     c_fn: &mut CFunction,
 ) {
-    writeln!(std::io::stdout(), "Statement: {:?}", stmt).unwrap();
-    writeln!(std::io::stdout(), "Statement Kind: {:?}", stmt.kind).unwrap();
-    match &stmt.kind {
-        StatementKind::Assign(val) => {
-            handle_assign(tcx, ongoing_codegen, &val.0, &val.1, c_fn);
-        }
-        _ => {}
+    let span = debug_span!("handle_stmt").entered();
+
+    debug!("Statement: {:?}", stmt);
+    debug!("Kind: {:?}", stmt.kind);
+
+    let expression = match &stmt.kind {
+        StatementKind::Assign(val) => handle_assign(tcx, ongoing_codegen, &val.0, &val.1),
+
+        _ => crepr::Expression::NoOp {},
+    };
+
+    let statement = crepr::Statement { expression, comment: Some(format!("//{:?}", stmt).into()) };
+
+    // we shouldn't be pushing strings directly into the function body, we should be pushing statements
+    c_fn.push(format!("{:?}", statement).as_str(), true, 0); 
+
+    span.exit();
+}
+
+fn handle_operand<'tcx>(
+    tcx: rustc_middle::ty::TyCtxt<'tcx>,
+    ongoing_codegen: &mut OngoingCodegen,
+    operand: &Operand<'tcx>,
+) -> crepr::Expression {
+    match operand {
+        Operand::Copy(place) => Expression::Variable { local: place.local.as_usize() },
+        // move operations can be treated as a copy operation (I think)
+        Operand::Move(place) => Expression::Variable { local: place.local.as_usize() },
+
+        Operand::Constant(constant) => handle_constant(tcx, ongoing_codegen, constant),
     }
 }
 
-// TODO: Decompose this function
 fn handle_assign<'tcx>(
     tcx: rustc_middle::ty::TyCtxt<'tcx>,
     ongoing_codegen: &mut OngoingCodegen,
     place: &Place<'tcx>,
     rvalue: &Rvalue<'tcx>,
-    c_fn: &mut CFunction,
-) {
-    writeln!(std::io::stdout(), "Place: {:?}", place).unwrap();
-    writeln!(std::io::stdout(), "Rvalue: {:?}", rvalue).unwrap();
+) -> crepr::Expression {
+    let span = debug_span!("handle_assign").entered();
+    debug!("place( {:?} )", place);
+    debug!("rvalue( {:?} )", rvalue);
 
-    let mut c_assign = String::new();
-    c_assign.push_str(format!("var{} = ", place.local.as_usize()).as_str());
-
-    match rvalue {
+    let expression = match rvalue {
         Rvalue::Use(operand) => {
-            // Match the operand
-            match operand {
-                rustc_middle::mir::Operand::Copy(place) => {
-                    c_assign.push_str(format!("var{};", place.local.as_usize()).as_str());
-                }
-                rustc_middle::mir::Operand::Move(place) => {
-                    todo!("Move");
-                }
-                rustc_middle::mir::Operand::Constant(constant) => match constant.const_ {
-                    rustc_middle::mir::Const::Unevaluated(c, t) => {
-                        match tcx.const_eval_poly(c.def) {
-                            Ok(val) => {
-                                c_assign.push_str(format!("{:?};", val).as_str());
-                            }
-                            Err(e) => {
-                                panic!("Error: {:?}", e);
-                            }
-                        }
-                    }
-                    rustc_middle::mir::Const::Val(val, ty) => match val {
-                        rustc_middle::mir::ConstValue::Scalar(scalar) => match scalar {
-                            rustc_const_eval::interpret::Scalar::Int(i) => {
-                                c_assign.push_str(format!("{:?};", i).as_str())
-                            }
-                            rustc_const_eval::interpret::Scalar::Ptr(_, _) => todo!("Ptr"),
-                        },
-                        _ => {}
-                    },
-                    _ => {}
-                },
+            handle_operand(tcx, ongoing_codegen, operand)
+        }
+
+        Rvalue::BinaryOp(op, operands) => {
+            let lhs = handle_operand(tcx, ongoing_codegen, &operands.0);
+            let rhs = handle_operand(tcx, ongoing_codegen, &operands.1);
+
+            crepr::Expression::BinaryOp {
+                op: op.into(),
+                lhs: Box::new(lhs),
+                rhs: Box::new(rhs),
             }
         }
-        _ => {}
-    }
 
-    c_fn.push(c_assign.as_str(), true, 1);
+        Rvalue::CheckedBinaryOp(op, operands) => {
+            let lhs = handle_operand(tcx, ongoing_codegen, &operands.0);
+            let rhs = handle_operand(tcx, ongoing_codegen, &operands.1);
+
+            crepr::Expression::CheckedBinaryOp {
+                op: op.into(),
+                lhs: Box::new(lhs),
+                rhs: Box::new(rhs),
+            }
+        }
+
+        _ => {
+            warn!("Unhandled rvalue: {:?}", rvalue);
+            crepr::Expression::NoOp {}
+        },
+    };
+
+    span.exit();
+
+    return crepr::Expression::Assignment {
+        lhs: Box::new(crepr::Expression::Variable { local: place.local.as_usize() }),
+        rhs: Box::new(expression),
+    };
+
+}
+
+fn handle_constant<'tcx>(
+    tcx: rustc_middle::ty::TyCtxt<'tcx>,
+    _ongoing_codegen: &mut OngoingCodegen,
+    constant: &ConstOperand<'tcx>,
+) -> Expression {
+
+    match constant.const_ {
+        rustc_middle::mir::Const::Unevaluated(c, t) => {
+            match tcx.const_eval_poly(c.def) {
+                Ok(val) => {
+                    return Expression::Constant{value: format!("{:?}", val).into()}; // todo handle this better
+                }
+
+                Err(e) => {
+                    unreachable!("Error: {:?}", e);
+                }
+            }
+        }
+
+        rustc_middle::mir::Const::Val(val, ty) => match val {
+            rustc_middle::mir::ConstValue::Scalar(scalar) => match scalar {
+                rustc_const_eval::interpret::Scalar::Int(i) => {
+                    return Expression::Constant{value:format!("{:?}", i).into()};
+                }
+
+                rustc_const_eval::interpret::Scalar::Ptr(_, _) => todo!("Ptr"),
+            },
+
+            _ => {
+                warn!("Unhandled constant: {:?}", val);
+                return Expression::NoOp {}
+            }
+        },
+
+        _ => {
+            warn!("Unhandled constant: {:?}", constant);
+            return Expression::NoOp {}
+        }
+    }
 }

@@ -11,3 +11,8 @@ test:
 
 clean:
 	cargo clean
+
+# for convenience sake
+dummy:
+	cargo build --release 
+	rustc ./tests/dummy.rs -Z codegen-backend=./target/release/librustc_codegen_c.so --out-dir ./tests/ 
