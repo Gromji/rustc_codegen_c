@@ -8,7 +8,8 @@ crate-type=["dylib"]
 
 [dependencies]
 # tidy-alphabetical-start
-tracing = "0.1.40"
+tracing = {version = "0.1.40", log = true, log-always = true}
+tracing-subscriber = "0.3"
 # tidy-alphabetical-end
 
 [package.metadata.rust-analyzer]

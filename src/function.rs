@@ -1,12 +1,12 @@
-use crate::base::OngoingCodegen;
 use crate::definition::CVarDef;
+use crate::stmt::handle_stmt;
 use crate::ty::CType;
-use rustc_middle::{
-    mir::{BasicBlockData, Rvalue, StatementKind},
-    ty::{print::with_no_trimmed_paths, Instance},
-};
+use crate::{base::OngoingCodegen, definition::CVarDecl};
+use rustc_middle::{mir::BasicBlockData, ty::Instance};
+use std::collections::HashSet;
 use std::fmt;
-use std::io::Write;
+
+use tracing::{debug, trace};
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct CFunction {
@@ -17,8 +17,8 @@ pub struct CFunction {
 }
 
 impl CFunction {
-    pub fn new(name: String, signature: Vec<CVarDef>, return_ty: CType) -> Self {
-        Self { name, signature, body: FnBody::new(String::new()), return_ty }
+    pub fn new(name: String, return_ty: CType) -> Self {
+        Self { name: name, signature: Vec::new(), body: FnBody::new(), return_ty: return_ty }
     }
 
     pub fn is_main(&self) -> bool {
@@ -41,6 +41,14 @@ impl CFunction {
         prototype
     }
 
+    pub fn add_signature_var(&mut self, var: CVarDef) {
+        self.signature.push(var);
+    }
+
+    pub fn add_var_decl(&mut self, var: CVarDecl) {
+        self.body.add_local_var(var);
+    }
+
     #[allow(dead_code)]
     pub fn validate_fn(&self) -> bool {
         todo!("TODO: Would be a good idea to have some kind of validation")
@@ -49,18 +57,24 @@ impl CFunction {
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct FnBody {
+    local_decl: Vec<CVarDecl>,
     body: String,
 }
 
 impl fmt::Display for FnBody {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "{{\n {} \n}}\n\n", self.body)
+    write!(f, "{{\n")?;
+        for decl in &self.local_decl {
+            write!(f, "    {}\n", decl)?;
+        }
+        write!(f, "{}", self.body)?;
+        write!(f, "}}")
     }
 }
 
 impl FnBody {
-    pub fn new(body: String) -> Self {
-        Self { body }
+    pub fn new() -> Self {
+        Self { local_decl: Vec::new(), body: String::new() }
     }
 
     #[allow(dead_code)]
@@ -73,6 +87,10 @@ impl FnBody {
         if newline {
             self.body.push('\n');
         }
+    }
+
+    pub fn add_local_var(&mut self, var: CVarDecl) {
+        self.local_decl.push(var);
     }
 
     #[allow(dead_code)]
@@ -96,6 +114,75 @@ impl fmt::Display for CFunction {
     }
 }
 
+fn print_mir<'tcx>(tcx: rustc_middle::ty::TyCtxt<'tcx>, mir: &rustc_middle::mir::Body<'tcx>) {
+    let mut buf = Vec::new();
+    rustc_middle::mir::pretty::write_mir_fn(tcx, mir, &mut |_, _| Ok(()), &mut buf).unwrap();
+
+    debug!("{}", &String::from_utf8_lossy(&buf).into_owned());
+}
+
+fn handle_decls<'tcx>(
+    _ongoing_codegen: &mut OngoingCodegen,
+    mir: &rustc_middle::mir::Body<'tcx>,
+    c_fn: &mut CFunction,
+) {
+    let local_decls = &mir.local_decls;
+
+    // TODO: Maybe use debug_info to get variable names
+    //let debug_info = &mir.var_debug_info;
+    //for info in debug_info.iter().enumerate() {
+    //    writeln!(std::io::stdout(), "Debug Info: {:?}", info).unwrap();
+    //}
+
+    // Create set of usize
+    let mut set: HashSet<usize> = HashSet::new();
+
+    mir.args_iter().for_each(|arg| {
+        let ty = local_decls[arg].ty;
+        let name = format!("var{}", arg.index());
+
+        // add index to set
+        set.insert(arg.index());
+
+        let c_var = CVarDef::new(name, CType::from(&ty));
+        c_fn.add_signature_var(c_var);
+    });
+
+    for (idx, decl) in local_decls.into_iter().enumerate() {
+        let decl: &rustc_middle::mir::LocalDecl = decl;
+        // check if idx is in set
+        if set.contains(&idx) {
+            continue;
+        }
+
+        let ty = decl.ty;
+        let name = format!("var{}", idx);
+        let c_var = CVarDef::new(name, CType::from(&ty));
+        c_fn.add_var_decl(CVarDecl::new(c_var, None));
+    }
+}
+
+fn handle_bbs<'tcx>(
+    tcx: rustc_middle::ty::TyCtxt<'tcx>,
+    ongoing_codegen: &mut OngoingCodegen,
+    mir: &rustc_middle::mir::Body<'tcx>,
+    c_fn: &mut CFunction,
+) {
+    let blocks = &mir.basic_blocks;
+    for (_last_bb_id, block_data) in blocks.into_iter().enumerate() {
+        let block_data: &BasicBlockData = block_data;
+
+        let statements: &Vec<rustc_middle::mir::Statement<'_>> = &block_data.statements;
+        
+        // Print basic block for debugging. TODO should probably depend on a cli argument. 
+        c_fn.body.push(&format!("// Basic Block: {:?}", block_data), true, 1);        
+        
+        for stmt in statements {
+            handle_stmt(tcx, ongoing_codegen, stmt, c_fn);
+        }
+    }
+}
+
 #[allow(unused_variables)]
 pub fn handle_fn<'tcx>(
     tcx: rustc_middle::ty::TyCtxt<'tcx>,
@@ -103,88 +190,26 @@ pub fn handle_fn<'tcx>(
     inst: &Instance<'tcx>,
 ) {
     let mir = tcx.instance_mir(inst.def);
+    let mut c_fn = CFunction::new(inst.to_string(), CType::from(&mir.return_ty()));
 
-    let blocks = &mir.basic_blocks;
-    for (last_bb_id, block_data) in blocks.into_iter().enumerate() {
-        let block_data: &BasicBlockData = block_data;
+    // Pring mir of function for debugging
+    print_mir(tcx, mir);
 
-        let statements = &block_data.statements;
-        with_no_trimmed_paths!({
-            for stmt in statements {
-                writeln!(std::io::stdout(), "Statement: {:?}", stmt).unwrap();
-                writeln!(std::io::stdout(), "Statement Kind: {:?}", stmt.kind).unwrap();
-                match &stmt.kind {
-                    StatementKind::Assign(val) => {
-                        let place = &val.0;
-                        let rvalue = &val.1;
-                        writeln!(std::io::stdout(), "Place: {:?}", place).unwrap();
-                        writeln!(std::io::stdout(), "Rvalue: {:?}", rvalue).unwrap();
+    // Handle local variables
+    handle_decls(ongoing_codegen, mir, &mut c_fn);
+    
+    trace!("{}", c_fn);
 
-                        match rvalue {
-                            Rvalue::Repeat(operand, len) => {
-                                writeln!(std::io::stdout(), "Repeat",).unwrap();
-                            }
-                            Rvalue::Ref(a, b, c) => {
-                                writeln!(std::io::stdout(), "Ref",).unwrap();
-                            }
-                            Rvalue::ThreadLocalRef(region) => {
-                                writeln!(std::io::stdout(), "ThreadLocalRef",).unwrap();
-                            }
-                            Rvalue::AddressOf(a, b) => {
-                                writeln!(std::io::stdout(), "AddressOf",).unwrap();
-                            }
-                            Rvalue::Len(a) => {
-                                writeln!(std::io::stdout(), "Len",).unwrap();
-                            }
-                            Rvalue::Cast(kind, operand, ty) => {
-                                writeln!(std::io::stdout(), "Cast",).unwrap();
-                            }
-                            Rvalue::BinaryOp(op, operand1) => {
-                                writeln!(std::io::stdout(), "BinaryOp",).unwrap();
-                            }
-                            Rvalue::CheckedBinaryOp(op, operand1) => {
-                                writeln!(std::io::stdout(), "CheckedBinaryOp",).unwrap();
-                            }
-                            Rvalue::NullaryOp(op, ty) => {
-                                writeln!(std::io::stdout(), "NullaryOp",).unwrap();
-                            }
-                            Rvalue::UnaryOp(op, operand) => {
-                                writeln!(std::io::stdout(), "UnaryOp",).unwrap();
-                            }
-                            Rvalue::Discriminant(place) => {
-                                writeln!(std::io::stdout(), "Discriminant",).unwrap();
-                            }
-                            Rvalue::Aggregate(kind, operands) => {
-                                writeln!(std::io::stdout(), "Aggregate",).unwrap();
-                            }
-                            Rvalue::ShallowInitBox(kind, operands) => {
-                                writeln!(std::io::stdout(), "ShallowInitBox",).unwrap();
-                            }
-                            Rvalue::CopyForDeref(kind) => {
-                                writeln!(std::io::stdout(), "CopyForDeref",).unwrap();
-                            }
-                            Rvalue::Use(operand) => match operand.constant() {
-                                Some(constant) => match constant.const_ {
-                                    rustc_middle::mir::Const::Unevaluated(c, t) => {
-                                        writeln!(
-                                            std::io::stdout(),
-                                            "Const: {:?} {:?}",
-                                            tcx.const_eval_poly(c.def),
-                                            t
-                                        )
-                                        .unwrap();
-                                    }
-                                    _ => {}
-                                },
-                                None => {
-                                    writeln!(std::io::stdout(), "Use: {:?}", operand).unwrap();
-                                }
-                            },
-                        }
-                    }
-                    _ => {}
-                }
-            }
-        });
+    // Handle basic blocks
+    handle_bbs(tcx, ongoing_codegen, mir, &mut c_fn);
+
+    // Add return statement
+    c_fn.push("return var0;", true, 1);
+
+    // If is main prefix with "_"
+    if c_fn.is_main() {
+        c_fn.name = format!("_{}", c_fn.name);
     }
+
+    ongoing_codegen.context.get_mut_functions().push(c_fn);
 }

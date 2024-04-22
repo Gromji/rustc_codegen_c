@@ -24,3 +24,25 @@ impl fmt::Display for CVarDef {
         }
     }
 }
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+
+pub struct CVarDecl {
+    pub var: CVarDef,
+    pub value: Option<String>,
+}
+
+impl CVarDecl {
+    pub fn new(var: CVarDef, value: Option<String>) -> Self {
+        Self { var, value }
+    }
+}
+
+impl fmt::Display for CVarDecl {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match &self.value {
+            Some(value) => write!(f, "{} = {};", self.var, value),
+            None => write!(f, "{};", self.var),
+        }
+    }
+}
