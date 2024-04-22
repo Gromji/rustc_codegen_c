@@ -5,6 +5,7 @@ use crate::function::CFunction;
 use crate::include::Include;
 use crate::structure::CStruct;
 use crate::ty::CType;
+use crate::ty::CIntTy;
 
 pub fn build_prefix(context: &mut Context) {
     // Includes
@@ -19,6 +20,7 @@ pub fn build_prefix(context: &mut Context) {
 fn prefix_includes() -> Vec<Include> {
     vec![
         Include::new("stdio.h".to_string(), true),
+        Include::new("stdint.h".to_string(), true),
         Include::new("stdlib.h".to_string(), true),
         Include::new("math.h".to_string(), true),
         Include::new("string.h".to_string(), true),
@@ -43,13 +45,14 @@ fn prefix_includes() -> Vec<Include> {
 fn prefix_functions() -> Vec<CFunction> {
     let mut functions: Vec<CFunction> = Vec::new();
 
-    let mut main = CFunction::new("main".to_string(), CType::Int);
+    let mut main = CFunction::new("main".to_string(), CType::Int(CIntTy::Int32));
 
-    main.add_signature_var(CVarDef::new("argc".to_string(), CType::Int));
+    main.add_signature_var(CVarDef::new("argc".to_string(), CType::Int(CIntTy::Int32)));
     main.add_signature_var(CVarDef::new(
         "argv".to_string(),
-        CType::Array(Box::new(CType::Pointer(Box::new(CType::Char))), 0),
+        CType::Array(Box::new(CType::Pointer(Box::new(CType::Int(CIntTy::Int8)))), 0),
     ));
+    main.push("setlocale(LC_ALL, \"\");\n", false, 1);
     main.push("return 0;\n", false, 1);
 
     functions.push(main);
