@@ -21,6 +21,7 @@ use rustc_metadata::EncodedMetadata;
 use rustc_middle::mir::mono::{CodegenUnit, MonoItem};
 use rustc_middle::ty::print::with_no_trimmed_paths;
 use rustc_session::config::{OutputFilenames, OutputType};
+use tracing_subscriber::util::SubscriberInitExt;
 
 use crate::function;
 use crate::include;
@@ -141,6 +142,13 @@ pub fn run<'tcx>(
 ) -> Box<(String, OngoingCodegen, EncodedMetadata, CrateInfo)> {
     let cgus: Vec<_> = tcx.collect_and_partition_mono_items(()).1.iter().collect();
     let mut ongoing_codegen = OngoingCodegen { context: Context::new() };
+    
+    tracing_subscriber::FmtSubscriber::builder()
+        .with_line_number(true)
+        .without_time()
+        .with_max_level(tracing::Level::DEBUG)
+        .finish()
+        .init();
 
     // Build the prefix code
     prefix::build_prefix(&mut ongoing_codegen.context);
