@@ -1,6 +1,6 @@
 use std::fmt;
 
-use rustc_middle::ty::Ty;
+use rustc_middle::ty::{Ty, FnSig};
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 #[allow(dead_code)]
@@ -17,7 +17,7 @@ pub enum CType {
     Enum,
     Pointer(Box<CType>),
     Array(Box<CType>, usize),
-    FunctionPtr(Box<CType>, Vec<CType>),
+    FunctionPtr(Box<CFuncPtrInfo>),
 }
 
 pub const NAME_TOKEN: &str = "<<name>>";
@@ -44,13 +44,16 @@ impl fmt::Display for CType {
                     write!(f, "{} {}[{}]", ty, NAME_TOKEN, size)
                 }
             }
-            CType::FunctionPtr(ty, args) => {
-                write!(f, "{} (*{}", ty, NAME_TOKEN)?;
-                for (i, arg) in args.iter().enumerate() {
+            CType::FunctionPtr(func_info) => {
+                write!(f, "{} (*{})(", func_info.ret, NAME_TOKEN)?;
+                for (i, arg) in func_info.args.iter().enumerate() {
                     if i > 0 {
                         write!(f, ", ")?;
                     }
                     write!(f, "{}", arg)?;
+                }
+                if func_info.args.len() == 0 {
+                    write!(f, "{}", CType::Void)?;
                 }
                 write!(f, ")")
             }
@@ -185,6 +188,18 @@ impl From<u64> for CFloatTy {
         }
     }
 }
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct CFuncPtrInfo {
+    pub args: Vec<CType>,
+    pub ret: Box<CType>,
+}
+impl<'tcx> From<FnSig<'tcx>> for CFuncPtrInfo {
+    fn from(value: FnSig<'tcx>) -> Self {
+        let types: Vec<CType> = value.inputs_and_output.iter().map(|x| CType::from(&x)).collect();
+        let last_idx = types.len() - 1;
+        CFuncPtrInfo{args: types[0..last_idx].to_vec(), ret: Box::new(types[last_idx].clone())}
+    }
+}
 
 
 
@@ -197,10 +212,10 @@ impl<'tcx> From<&Ty<'tcx>> for CType {
             rustc_middle::ty::Uint(u) => CType::UInt(CUIntTy::from(u.bit_width().unwrap_or(CUIntTy::DEFAULT_BIT_WIDTH))),
             rustc_middle::ty::Int(i) => CType::Int(CIntTy::from(i.bit_width().unwrap_or(CIntTy::DEFAULT_BIT_WIDTH))),
             rustc_middle::ty::Float(float) => CType::Float(CFloatTy::from(float.bit_width())),
-            rustc_middle::ty::FnPtr(s) => CType::FunctionPtr(Box::new(CType::Void), Vec::new()),
+            rustc_middle::ty::FnPtr(s) => CType::FunctionPtr(Box::new(CFuncPtrInfo::from(s.skip_binder()))),
             rustc_middle::ty::Ref(_, ty, _) => CType::Pointer(Box::new(CType::from(ty))),
             rustc_middle::ty::Array(ty, size) => {
-                CType::Array(Box::new(CType::from(ty)), todo!("Set array size"))
+                CType::Array(Box::new(CType::from(ty)), size.try_to_scalar().unwrap().to_u64().unwrap().try_into().unwrap())
             }
             rustc_middle::ty::Adt(adt, _) => match adt.adt_kind() {
                 rustc_middle::ty::AdtKind::Struct => CType::Struct,

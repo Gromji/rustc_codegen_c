@@ -17,7 +17,7 @@ impl CVarDef {
 impl fmt::Display for CVarDef {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self.ty {
-            CType::Array(_, _) | CType::FunctionPtr(_, _) => {
+            CType::Array(_, _) | CType::FunctionPtr(_) => {
                 write!(f, "{}", format!("{}", self.ty).replace(NAME_TOKEN, &self.name))
             }
             _ => write!(f, "{} {}", self.ty, self.name),
