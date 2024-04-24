@@ -61,7 +61,7 @@ fn prefix_functions() -> Vec<CFunction> {
 fn prefix_structs() -> Vec<CStruct> {
     // add an unit struct
     let mut structs: Vec<CStruct> = Vec::new();
-    let mut unit_struct = CStruct::new("__Unit".to_string());
+    let unit_struct = CStruct::new("__Unit".to_string());
     structs.push(unit_struct);
 
     structs

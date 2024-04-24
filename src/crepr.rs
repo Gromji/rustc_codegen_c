@@ -7,6 +7,8 @@ pub struct RepresentationContext {
 
     pub include_newline: bool,
     pub include_comments: bool,
+
+    pub var_name: Option<String>,
 }
 
 pub trait Representable {
@@ -234,6 +236,7 @@ impl Debug for Statement {
                 indent_string: "\t".into(),
                 include_newline: true,
                 include_comments: true,
+                var_name: None,
             },
         )
     }

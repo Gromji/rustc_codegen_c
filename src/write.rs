@@ -6,7 +6,7 @@ use crate::structure;
 
 // Write includes to the file
 pub fn write_includes(includes: &Vec<include::Include>, file: &mut File) {
-    let includes = includes.iter().map(|i| i.to_string()).collect::<Vec<String>>();
+    let includes = includes.iter().map(|i| format!("{:?}", i)).collect::<Vec<String>>();
 
     file.write_all(includes.join("\n").as_bytes()).unwrap();
 }
@@ -22,7 +22,7 @@ pub fn write_prototypes(functions: &Vec<function::CFunction>, file: &mut File) {
 
 // Write structs to the file
 pub fn write_structs(structs: &Vec<structure::CStruct>, file: &mut File) {
-    let structs = structs.iter().map(|s| s.to_string()).collect::<Vec<String>>();
+    let structs = structs.iter().map(|s| format!("{:?}", s)).collect::<Vec<String>>();
 
     // Write newline
     file.write_all(b"\n\n").unwrap();
@@ -45,6 +45,6 @@ pub fn write_functions(functions: &Vec<function::CFunction>, file: &mut File) {
         )
         .unwrap();
     }
-    let functions = functions.iter().map(|f| f.to_string()).collect::<Vec<String>>();
+    let functions = functions.iter().map(|f| format!("{:?}", f)).collect::<Vec<String>>();
     file.write_all(functions.join("\n\n").as_bytes()).unwrap();
 }
