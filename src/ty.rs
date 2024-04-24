@@ -209,20 +209,28 @@ impl<'tcx> From<&Ty<'tcx>> for CType {
         match ty.kind() {
             rustc_middle::ty::Bool => CType::Bool,
             rustc_middle::ty::Char => CType::Char,
+            // Will only work for ascii chars. Implement for wchars.
+            rustc_middle::ty::Str => CType::Array(Box::new(CType::Char), 0),
             rustc_middle::ty::Uint(u) => CType::UInt(CUIntTy::from(u.bit_width().unwrap_or(CUIntTy::DEFAULT_BIT_WIDTH))),
             rustc_middle::ty::Int(i) => CType::Int(CIntTy::from(i.bit_width().unwrap_or(CIntTy::DEFAULT_BIT_WIDTH))),
             rustc_middle::ty::Float(float) => CType::Float(CFloatTy::from(float.bit_width())),
             rustc_middle::ty::FnPtr(s) => CType::FunctionPtr(Box::new(CFuncPtrInfo::from(s.skip_binder()))),
             rustc_middle::ty::Ref(_, ty, _) => CType::Pointer(Box::new(CType::from(ty))),
             rustc_middle::ty::Array(ty, size) => {
+                // Move value extraction to utils::try_usize or think of something better
                 CType::Array(Box::new(CType::from(ty)), size.try_to_scalar().unwrap().to_u64().unwrap().try_into().unwrap())
             }
+            rustc_middle::ty::Slice(ty) => CType::from(ty),
+            rustc_middle::ty::Tuple(t) => panic!("yet to implement!"),
             rustc_middle::ty::Adt(adt, _) => match adt.adt_kind() {
                 rustc_middle::ty::AdtKind::Struct => CType::Struct,
                 rustc_middle::ty::AdtKind::Union => CType::Union,
                 rustc_middle::ty::AdtKind::Enum => CType::Enum,
             },
-            _ => CType::Unit,
+            _ => {
+                println!("printing unknown type: {:?}", ty.kind());
+                CType::Unit
+            },
         }
     }
 }
