@@ -1,8 +1,10 @@
-use std::fmt;
+use std::fmt::{self, Debug};
 
 use rustc_middle::ty::Ty;
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+use crate::crepr::Representable;
+
+#[derive(Clone, PartialEq, Eq)]
 #[allow(dead_code)]
 pub enum CType {
     Unit,
@@ -29,10 +31,12 @@ pub enum CType {
     FunctionPtr(Box<CType>, Vec<CType>),
 }
 
-pub const NAME_TOKEN: &str = "<<name>>";
-
-impl fmt::Display for CType {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+impl Representable for CType {
+    fn repr(
+        &self,
+        f: &mut fmt::Formatter<'_>,
+        _context: &crate::crepr::RepresentationContext,
+    ) -> fmt::Result {
         match self {
             // Custom struct for Rust's Unit type
             CType::Unit => write!(f, "struct __Unit"),
@@ -54,25 +58,51 @@ impl fmt::Display for CType {
             CType::Struct => write!(f, "struct"),
             CType::Union => write!(f, "union"),
             CType::Enum => write!(f, "enum"),
-            CType::Pointer(ty) => write!(f, "{}*", ty),
+            CType::Pointer(ty) => write!(f, "{:?}*", ty),
             CType::Array(ty, size) => {
                 if *size as u32 == 0 {
-                    write!(f, "{} {}[]", ty, NAME_TOKEN)
+                    match &_context.var_name {
+                        Some(name) => write!(f, "{:?} {}[]", ty, name),
+                        None => panic!("Variable must have a name"),
+                    }
                 } else {
-                    write!(f, "{} {}[{}]", ty, NAME_TOKEN, size)
+                    match &_context.var_name {
+                        Some(name) => write!(f, "{:?} {}[{}]", ty, name, size),
+                        None => panic!("Variable must have a name"),
+                    }
                 }
             }
             CType::FunctionPtr(ty, args) => {
-                write!(f, "{} (*{}", ty, NAME_TOKEN)?;
+                match &_context.var_name {
+                    Some(name) => write!(f, "{:?} (*{}", ty, name)?,
+                    None => panic!("Variable must have a name"),
+                }
+
                 for (i, arg) in args.iter().enumerate() {
                     if i > 0 {
                         write!(f, ", ")?;
                     }
-                    write!(f, "{}", arg)?;
+                    write!(f, "{:?}", arg)?;
                 }
+
                 write!(f, ")")
             }
         }
+    }
+}
+
+impl Debug for CType {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        self.repr(
+            f,
+            &crate::crepr::RepresentationContext {
+                indent: 1,
+                indent_string: "\t".into(),
+                include_newline: true,
+                include_comments: true,
+                var_name: None,
+            },
+        )
     }
 }
 

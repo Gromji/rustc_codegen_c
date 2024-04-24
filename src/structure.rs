@@ -1,6 +1,11 @@
-use crate::definition::CVarDef;
+use std::fmt::{self, Debug};
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+use crate::{
+    crepr::{Representable, RepresentationContext},
+    definition::CVarDef,
+};
+
+#[derive(Clone, PartialEq, Eq)]
 pub struct CStruct {
     name: String,
     fields: Vec<CVarDef>,
@@ -21,14 +26,33 @@ impl CStruct {
     }
 }
 
-impl std::fmt::Display for CStruct {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        let mut definition = format!("struct {} {{\n", self.name);
-        for field in &self.fields {
-            definition.push_str(&format!("    {};\n", field));
-        }
-        definition.push_str("};");
+impl Debug for CStruct {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        self.repr(
+            f,
+            &RepresentationContext {
+                indent: 1,
+                indent_string: "\t".into(),
+                include_newline: true,
+                include_comments: true,
+                var_name: None,
+            },
+        )
+    }
+}
 
-        write!(f, "{}", definition)
+impl Representable for CStruct {
+    fn repr(
+        &self,
+        f: &mut std::fmt::Formatter<'_>,
+        _context: &crate::crepr::RepresentationContext,
+    ) -> std::fmt::Result {
+        write!(f, "struct {} {{\n", self.name)?;
+        for field in &self.fields {
+            write!(f, "{}", _context.indent_string.as_str().repeat(_context.indent))?;
+            field.repr(f, _context)?;
+            write!(f, ";\n")?;
+        }
+        write!(f, "}};")
     }
 }
