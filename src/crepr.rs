@@ -1,6 +1,7 @@
 use std::fmt::{self, Debug};
 
 // TODO we could pass more information to this context, such as the current function, to allow for more context-aware representations
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct RepresentationContext {
     pub indent: usize,
     pub indent_string: String,
@@ -13,10 +14,22 @@ pub struct RepresentationContext {
 
 pub trait Representable {
     fn repr(&self, f: &mut fmt::Formatter<'_>, context: &RepresentationContext) -> fmt::Result;
+    fn default_repr(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        self.repr(
+            f,
+            &RepresentationContext {
+                indent: 1,
+                indent_string: "\t".into(),
+                include_newline: true,
+                include_comments: true,
+                var_name: None,
+            },
+        )
+    }
 }
 
 #[allow(dead_code)]
-#[derive(Debug)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum BinOpType {
     Add,
     Sub,
@@ -90,7 +103,7 @@ impl Representable for BinOpType {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 #[allow(dead_code)]
 pub enum UnaryOpType {
     Neg,
@@ -99,7 +112,7 @@ pub enum UnaryOpType {
 }
 
 impl Representable for UnaryOpType {
-    fn repr(&self, f: &mut fmt::Formatter<'_>, context: &RepresentationContext) -> fmt::Result {
+    fn repr(&self, f: &mut fmt::Formatter<'_>, _context: &RepresentationContext) -> fmt::Result {
         match self {
             UnaryOpType::Neg => write!(f, "-"),
             UnaryOpType::Not => write!(f, "!"),
@@ -112,15 +125,15 @@ pub struct Constant {
     pub value: String, // TODO this is a copout, we should have a proper representation for constants
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Expression {
     Constant { value: String },
     Variable { local: usize }, // TODO this might not be an appropriate representation, especially if we plan to add debug info into the mix
-
     Assignment { lhs: Box<Expression>, rhs: Box<Expression> },
     BinaryOp { op: BinOpType, lhs: Box<Expression>, rhs: Box<Expression> },
     CheckedBinaryOp { op: BinOpType, lhs: Box<Expression>, rhs: Box<Expression> },
     UnaryOp { op: UnaryOpType, val: Box<Expression> },
+    Return { value: Box<Expression> },
     NoOp {},
 }
 
@@ -188,56 +201,19 @@ impl Representable for Expression {
                     write!(f, "")
                 }
             }
+
+            Expression::Return { value } => {
+                write!(f, "return ")?;
+                value.repr(f, context)?;
+                Ok(())
+            }
         }
     }
 }
 
-pub struct Statement {
-    pub expression: Expression,
-    pub comment: Option<String>,
-}
-
-fn add_indent(f: &mut fmt::Formatter<'_>, context: &RepresentationContext) -> fmt::Result {
+pub fn add_indent(f: &mut fmt::Formatter<'_>, context: &RepresentationContext) -> fmt::Result {
     for _ in 0..context.indent {
         write!(f, "{}", context.indent_string)?;
     }
     Ok(())
-}
-
-impl Representable for Statement {
-    fn repr(&self, f: &mut fmt::Formatter<'_>, context: &RepresentationContext) -> fmt::Result {
-        if context.include_comments {
-            if let Some(comment) = &self.comment {
-                add_indent(f, context)?;
-                write!(f, "/* {} */\n", comment)?;
-            }
-        }
-
-        add_indent(f, context)?;
-
-        self.expression.repr(f, context)?;
-
-        write!(f, ";")?;
-
-        if context.include_newline {
-            write!(f, "\n")?;
-        }
-
-        Ok(())
-    }
-}
-
-impl Debug for Statement {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        self.repr(
-            f,
-            &RepresentationContext {
-                indent: 1,
-                indent_string: "\t".into(),
-                include_newline: true,
-                include_comments: true,
-                var_name: None,
-            },
-        )
-    }
 }

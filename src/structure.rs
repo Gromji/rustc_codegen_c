@@ -1,7 +1,7 @@
 use std::fmt::{self, Debug};
 
 use crate::{
-    crepr::{Representable, RepresentationContext},
+    crepr::Representable,
     definition::CVarDef,
 };
 
@@ -28,16 +28,7 @@ impl CStruct {
 
 impl Debug for CStruct {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        self.repr(
-            f,
-            &RepresentationContext {
-                indent: 1,
-                indent_string: "\t".into(),
-                include_newline: true,
-                include_comments: true,
-                var_name: None,
-            },
-        )
+        self.default_repr(f)
     }
 }
 
