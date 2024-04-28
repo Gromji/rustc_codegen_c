@@ -35,16 +35,7 @@ impl Representable for CVarDef {
 
 impl Debug for CVarDef {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        self.repr(
-            f,
-            &RepresentationContext {
-                indent: 1,
-                indent_string: "\t".into(),
-                include_newline: true,
-                include_comments: true,
-                var_name: None,
-            },
-        )
+        self.default_repr(f)
     }
 }
 
@@ -69,7 +60,7 @@ impl Representable for CVarDecl {
                 write!(f, " = {};", value)
             }
             None => {
-                self.var.repr(f, _context);
+                self.var.repr(f, _context)?;
                 write!(f, ";")
             }
         }
@@ -78,15 +69,6 @@ impl Representable for CVarDecl {
 
 impl Debug for CVarDecl {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        self.repr(
-            f,
-            &RepresentationContext {
-                indent: 1,
-                indent_string: "\t".into(),
-                include_newline: true,
-                include_comments: true,
-                var_name: None,
-            },
-        )
+        self.default_repr(f)
     }
 }

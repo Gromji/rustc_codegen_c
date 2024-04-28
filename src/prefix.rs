@@ -6,6 +6,9 @@ use crate::include::Include;
 use crate::structure::CStruct;
 use crate::ty::CType;
 
+use crate::crepr::Expression;
+use crate::stmt::Statement;
+
 pub fn build_prefix(context: &mut Context) {
     // Includes
     context.get_mut_includes().append(&mut prefix_includes());
@@ -50,7 +53,9 @@ fn prefix_functions() -> Vec<CFunction> {
         "argv".to_string(),
         CType::Array(Box::new(CType::Pointer(Box::new(CType::Char))), 0),
     ));
-    main.push("return 0;\n", false, 1);
+
+    //return 0;
+    main.push(Statement::from_expression(Expression::Return { value: Box::new(Expression::Constant { value: "0".into() }) }));
 
     functions.push(main);
 
