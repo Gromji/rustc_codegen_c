@@ -1,12 +1,18 @@
 use std::fmt::{self, Debug};
 
+use crate::structure::CStruct;
+
 // TODO we could pass more information to this context, such as the current function, to allow for more context-aware representations
+#[derive(Clone, Default)]
 pub struct RepresentationContext {
     pub indent: usize,
     pub indent_string: String,
 
     pub include_newline: bool,
     pub include_comments: bool,
+
+    pub var_name: Option<String>,
+    pub n_ptr: u8,
 }
 
 pub trait Representable {
@@ -97,7 +103,7 @@ pub enum UnaryOpType {
 }
 
 impl Representable for UnaryOpType {
-    fn repr(&self, f: &mut fmt::Formatter<'_>, context: &RepresentationContext) -> fmt::Result {
+    fn repr(&self, f: &mut fmt::Formatter<'_>, _context: &RepresentationContext) -> fmt::Result {
         match self {
             UnaryOpType::Neg => write!(f, "-"),
             UnaryOpType::Not => write!(f, "!"),
@@ -234,6 +240,7 @@ impl Debug for Statement {
                 indent_string: "\t".into(),
                 include_newline: true,
                 include_comments: true,
+                ..Default::default()
             },
         )
     }

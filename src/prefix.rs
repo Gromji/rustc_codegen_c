@@ -62,10 +62,18 @@ fn prefix_functions() -> Vec<CFunction> {
 
 // List of starter structs
 fn prefix_structs() -> Vec<CStruct> {
-    // add an unit struct
     let mut structs: Vec<CStruct> = Vec::new();
-    let mut unit_struct = CStruct::new("__Unit".to_string());
+
+    // create an unit struct
+    let unit_struct = CStruct::new("__Unit".to_string(), None);
+
+    // create checked int for testing
+    let mut checked_int = CStruct::new("__CheckedInt".to_string(), None);
+    checked_int.push(CVarDef::new("value".to_string(), CType::Int(CIntTy::Int32)));
+    checked_int.push(CVarDef::new("flag".to_string(), CType::Bool));
+
     structs.push(unit_struct);
+    structs.push(checked_int);
 
     structs
 }
