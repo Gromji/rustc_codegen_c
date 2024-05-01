@@ -55,6 +55,9 @@ fn prefix_functions() -> Vec<CFunction> {
         "argv".to_string(),
         CType::Array(Box::new(CType::Pointer(Box::new(CType::Int(CIntTy::Int8)))), 0),
     ));
+
+    // TODO: rewrite main.push("setlocale(LC_ALL, \"\");\n", false, 1);
+
     //return 0;
     main.push(Statement::from_expression(Expression::Return { value: Box::new(Expression::Constant { value: "0".into() }) }));
 

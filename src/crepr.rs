@@ -25,7 +25,7 @@ pub trait Representable {
                 indent_string: "\t".into(),
                 include_newline: true,
                 include_comments: true,
-                var_name: None,
+                ..Default::default()
             },
         )
     }
