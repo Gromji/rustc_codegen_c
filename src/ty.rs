@@ -56,7 +56,7 @@ impl Representable for CType {
             }
             CType::Char => {
                 let ptrs = "*".repeat(context.n_ptr.into());
-                let c_type = format!("wchar_t{}", ptrs);
+                let c_type = format!("char32_t{}", ptrs);
                 match &context.var_name {
                     Some(name) => write!(f, "{c_type} {name}"),
                     None => write!(f, "{c_type}"),
