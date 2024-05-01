@@ -1,6 +1,6 @@
-use crate::crepr::{Representable, RepresentationContext};
+use crate::crepr::{Representable, RepresentationContext, Expression};
 use crate::definition::CVarDef;
-use crate::stmt::handle_stmt;
+use crate::stmt::{handle_stmt, Statement};
 use crate::ty::{CStructInfo, CType};
 use crate::{base::OngoingCodegen, definition::CVarDecl};
 use rustc_middle::{
@@ -38,16 +38,7 @@ impl Representable for CFunction {
 
 impl Debug for CFunction {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        self.repr(
-            f,
-            &RepresentationContext {
-                indent: 1,
-                indent_string: "\t".into(),
-                include_newline: true,
-                include_comments: true,
-                ..Default::default()
-            },
-        )
+        self.default_repr(f)
     }
 }
 
@@ -60,8 +51,8 @@ impl CFunction {
         self.name == "main"
     }
 
-    pub fn push(&mut self, line: &str, newline: bool, indent: usize) {
-        self.body.push(line, newline, indent);
+    pub fn push(&mut self, stmt: Statement) {
+        self.body.push(stmt);
     }
 
     pub fn as_prototype(&self) -> String {
@@ -93,7 +84,7 @@ impl CFunction {
 #[derive(Clone, PartialEq, Eq)]
 pub struct FnBody {
     local_decl: Vec<CVarDecl>,
-    body: String,
+    body: Vec<Statement>,
 }
 
 impl Representable for FnBody {
@@ -104,29 +95,24 @@ impl Representable for FnBody {
             decl.repr(f, _context)?;
             write!(f, "\n")?;
         }
-        write!(f, "{}", self.body)?;
+
+        for stmt in &self.body {
+            stmt.repr(f, _context)?;
+        }
+
         write!(f, "}}")
     }
 }
 
 impl Debug for FnBody {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        self.repr(
-            f,
-            &RepresentationContext {
-                indent: 1,
-                indent_string: "\t".into(),
-                include_newline: true,
-                include_comments: true,
-                ..Default::default()
-            },
-        )
+        self.default_repr(f)
     }
 }
 
 impl FnBody {
     pub fn new() -> Self {
-        Self { local_decl: Vec::new(), body: String::new() }
+        Self { local_decl: Vec::new(), body: Vec::new() }
     }
 
     #[allow(dead_code)]
@@ -134,14 +120,8 @@ impl FnBody {
         self.body.is_empty()
     }
 
-    // TODO: Probably not a good idea to push string lines directly
-    // We should change this as soon as possible.
-    // Also, hardcoded indent string will cause problems, since RepresentationContext also defines indendation_string.
-    pub fn push(&mut self, line: &str, newline: bool, indent: usize) {
-        self.body.push_str(&("    ".repeat(indent) + line));
-        if newline {
-            self.body.push('\n');
-        }
+    pub fn push(&mut self, stmt: Statement) {
+        self.body.push(stmt);
     }
 
     pub fn add_local_var(&mut self, var: CVarDecl) {
@@ -226,10 +206,10 @@ fn handle_bbs<'tcx>(
         let statements: &Vec<rustc_middle::mir::Statement<'_>> = &block_data.statements;
 
         // Print basic block for debugging. TODO should probably depend on a cli argument.
-        c_fn.body.push(&format!("// Basic Block: {:?}", block_data), true, 1);
+        c_fn.push(Statement::from_comment(format!("Basic Block: {:?}", block_data)));
 
         for stmt in statements {
-            handle_stmt(tcx, ongoing_codegen, stmt, c_fn);
+            c_fn.push(handle_stmt(tcx, ongoing_codegen, stmt));
         }
     }
 }
@@ -254,8 +234,8 @@ pub fn handle_fn<'tcx>(
     // Handle basic blocks
     handle_bbs(tcx, ongoing_codegen, mir, &mut c_fn);
 
-    // Add return statement
-    c_fn.push("return var0;", true, 1);
+    // equivalent to return var0, since we are not handling return values yet
+    c_fn.push(Statement::from_expression(Expression::Return { value: Box::new(Expression::Variable { local: 0 }) }));
 
     // If is main prefix with "_"
     if c_fn.is_main() {

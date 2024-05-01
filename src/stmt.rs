@@ -1,17 +1,64 @@
 use crate::base::OngoingCodegen;
 use crate::function::CFunction;
 use rustc_middle::mir::{ConstOperand, Operand, Place, Rvalue, StatementKind};
-
+use std::fmt::{self, Debug};
 use tracing::{debug, debug_span, warn};
 
-use crate::crepr::{self, Expression};
+use crate::crepr::{self, Expression, RepresentationContext, Representable, add_indent};
+
+#[derive(Clone, PartialEq, Eq)]
+pub struct Statement {
+    pub expression: Option<Expression>,
+    pub comment: Option<String>,
+}
+
+impl Statement {
+    pub fn new(expression: Expression, comment: String) -> Self {
+        Self { expression: Some(expression), comment: (Some(comment)) }
+    }
+
+    pub fn from_expression(expression: Expression) -> Self {
+        Self { expression: Some(expression), comment: None }
+    }
+
+    pub fn from_comment(comment: String) -> Self {
+        Self { expression: None, comment: Some(comment) }
+    }
+}
+
+impl Representable for Statement {
+    fn repr(&self, f: &mut fmt::Formatter<'_>, context: &RepresentationContext) -> fmt::Result {
+        if context.include_comments {
+            if let Some(comment) = &self.comment {
+                add_indent(f, context)?;
+                write!(f, "/* {} */\n", comment)?;
+            }
+        }
+        
+        if let Some(expression) = &self.expression {
+            add_indent(f, context)?;
+            expression.repr(f, context)?;
+            write!(f, ";")?;
+            if context.include_newline {
+                write!(f, "\n")?;
+            }
+        }
+
+        Ok(())
+    }
+}
+
+impl Debug for Statement {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        self.default_repr(f)
+    }
+}
 
 pub fn handle_stmt<'tcx>(
     tcx: rustc_middle::ty::TyCtxt<'tcx>,
     ongoing_codegen: &mut OngoingCodegen,
     stmt: &rustc_middle::mir::Statement<'tcx>,
-    c_fn: &mut CFunction,
-) {
+)-> Statement {
     let span = debug_span!("handle_stmt").entered();
 
     debug!("Statement: {:?}", stmt);
@@ -23,12 +70,13 @@ pub fn handle_stmt<'tcx>(
         _ => crepr::Expression::NoOp {},
     };
 
-    let statement = crepr::Statement { expression, comment: Some(format!("//{:?}", stmt).into()) };
+    let statement = Statement::new(expression,format!("//{:?}", stmt).into());
 
     // we shouldn't be pushing strings directly into the function body, we should be pushing statements
-    c_fn.push(format!("{:?}", statement).as_str(), true, 0);
 
     span.exit();
+
+    return statement;
 }
 
 fn handle_operand<'tcx>(
