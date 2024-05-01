@@ -3,9 +3,9 @@ use std::fmt::{self, Debug};
 use crate::{
     crepr::{Representable, RepresentationContext},
     definition::CVarDef,
-    ty::CType
+    ty::CType,
 };
-use rustc_middle::ty::{Ty, List};
+use rustc_middle::ty::{List, Ty};
 
 #[derive(Clone)]
 pub struct CStruct {
@@ -15,9 +15,9 @@ pub struct CStruct {
 
 impl CStruct {
     pub fn new(name: String, fields: Option<Vec<CVarDef>>) -> Self {
-        match fields{
+        match fields {
             Some(fields) => Self { name, fields },
-            None => Self { name, fields: Vec::new() }
+            None => Self { name, fields: Vec::new() },
         }
     }
 
@@ -87,9 +87,11 @@ impl<'tcx> From<&List<Ty<'tcx>>> for CStruct {
         for ty in list {
             struct_name.push_str(&format!("{:?}", ty));
         }
-        // Change names instead of 
-        let fields = list.iter()
-            .enumerate().map(|(idx, ty)| CVarDef::new(format!("field_{idx}"), CType::from(&ty)))
+        // Change names instead of
+        let fields = list
+            .iter()
+            .enumerate()
+            .map(|(idx, ty)| CVarDef::new(format!("field_{idx}"), CType::from(&ty)))
             .collect();
         Self::new(struct_name, Some(fields))
     }

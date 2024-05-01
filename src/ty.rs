@@ -28,98 +28,96 @@ impl Representable for CType {
         f: &mut fmt::Formatter<'_>,
         context: &crate::crepr::RepresentationContext,
     ) -> fmt::Result {
-
         match self {
             // Custom struct for Rust's Unit type
             CType::Unit => {
                 let ptrs = "*".repeat(context.n_ptr.into());
                 let c_type = format!("struct __Unit{}", ptrs);
-                match &context.var_name{
+                match &context.var_name {
                     Some(name) => write!(f, "{c_type} {name}"),
-                    None => write!(f, "{c_type}")
+                    None => write!(f, "{c_type}"),
                 }
-            },
+            }
             CType::Void => {
                 let ptrs = "*".repeat(context.n_ptr.into());
                 let c_type = format!("void{}", ptrs);
-                match &context.var_name{
+                match &context.var_name {
                     Some(name) => write!(f, "{c_type} {name}"),
-                    None => write!(f, "{c_type}")
+                    None => write!(f, "{c_type}"),
                 }
-            },
+            }
             CType::Bool => {
                 let ptrs = "*".repeat(context.n_ptr.into());
                 let c_type = format!("bool{}", ptrs);
-                match &context.var_name{
+                match &context.var_name {
                     Some(name) => write!(f, "{c_type} {name}"),
-                    None => write!(f, "{c_type}")
+                    None => write!(f, "{c_type}"),
                 }
-            },
+            }
             CType::Char => {
                 let ptrs = "*".repeat(context.n_ptr.into());
                 let c_type = format!("wchar_t{}", ptrs);
-                match &context.var_name{
+                match &context.var_name {
                     Some(name) => write!(f, "{c_type} {name}"),
-                    None => write!(f, "{c_type}")
+                    None => write!(f, "{c_type}"),
                 }
-            },
+            }
             CType::Int(i) => {
                 let ptrs = "*".repeat(context.n_ptr.into());
                 let c_type = format!("{}{}", i.name_str(), ptrs);
-                match &context.var_name{
+                match &context.var_name {
                     Some(name) => write!(f, "{c_type} {name}"),
-                    None => write!(f, "{c_type}")
+                    None => write!(f, "{c_type}"),
                 }
-            },
+            }
             CType::UInt(u) => {
                 let ptrs = "*".repeat(context.n_ptr.into());
                 let c_type = format!("{}{}", u.name_str(), ptrs);
-                match &context.var_name{
+                match &context.var_name {
                     Some(name) => write!(f, "{c_type} {name}"),
-                    None => write!(f, "{c_type}")
+                    None => write!(f, "{c_type}"),
                 }
-            },
+            }
             CType::Float(float) => {
                 let ptrs = "*".repeat(context.n_ptr.into());
                 let c_type = format!("{}{}", float.name_str(), ptrs);
-                match &context.var_name{
+                match &context.var_name {
                     Some(name) => write!(f, "{c_type} {name}"),
-                    None => write!(f, "{c_type}")
+                    None => write!(f, "{c_type}"),
                 }
-            },
-            // Incorrectly implemented, needs fix!
+            }
             CType::Struct(info) => {
                 let struct_name = &info.name;
                 let ptrs = "*".repeat(context.n_ptr.into());
                 let c_type = format!("struct {struct_name}{ptrs}");
-                match &context.var_name{
+                match &context.var_name {
                     Some(name) => write!(f, "{c_type} {name}"),
-                    None => write!(f, "{c_type}")
+                    None => write!(f, "{c_type}"),
                 }
-            },
+            }
             // Incorrectly implemented, needs fix!
             CType::Union => {
                 let ptrs = "*".repeat(context.n_ptr.into());
                 let c_type = format!("union{}", ptrs);
-                match &context.var_name{
+                match &context.var_name {
                     Some(name) => write!(f, "{c_type} {name}"),
-                    None => write!(f, "{c_type}")
+                    None => write!(f, "{c_type}"),
                 }
-            },
+            }
             // Incorrectly implemented, needs fix!
             CType::Enum => {
                 let ptrs = "*".repeat(context.n_ptr.into());
                 let c_type = format!("enum{}", ptrs);
-                match &context.var_name{
+                match &context.var_name {
                     Some(name) => write!(f, "enum {name}"),
-                    None => write!(f, "enum")
+                    None => write!(f, "enum"),
                 }
-            },
+            }
             CType::Pointer(ty) => {
-                let mut child_context: RepresentationContext  = (*context).clone();
+                let mut child_context: RepresentationContext = (*context).clone();
                 child_context.n_ptr += 1;
                 ty.repr(f, &child_context)
-            },
+            }
             CType::Array(ty, size) => {
                 // Change this later.
                 let child_context: RepresentationContext = Default::default();
@@ -311,57 +309,64 @@ impl<'tcx> From<FnSig<'tcx>> for CFuncPtrInfo {
     fn from(value: FnSig<'tcx>) -> Self {
         let types: Vec<CType> = value.inputs_and_output.iter().map(|x| CType::from(&x)).collect();
         let last_idx = types.len() - 1;
-        CFuncPtrInfo{args: types[0..last_idx].to_vec(), ret: Box::new(types[last_idx].clone())}
+        CFuncPtrInfo { args: types[0..last_idx].to_vec(), ret: Box::new(types[last_idx].clone()) }
     }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct CStructInfo{
-    pub name: String
+pub struct CStructInfo {
+    pub name: String,
 }
 
-impl From<&VariantDef> for CStructInfo{
+impl From<&VariantDef> for CStructInfo {
     fn from(value: &VariantDef) -> Self {
-        // Change this. to_string uses unsafe!!!
-        CStructInfo{name: value.name.to_string()}
+        // TODO: Change this. to_string uses unsafe!!!
+        CStructInfo { name: value.name.to_string() }
     }
 }
-impl From<&String> for CStructInfo{
+impl From<&String> for CStructInfo {
     fn from(value: &String) -> Self {
-        // Change this. to_string uses unsafe!!!
-        CStructInfo{name: value.clone()}
+        CStructInfo { name: value.clone() }
     }
 }
 
-
-// TODO: This is not yet done. Probably shouldn't be returning Unit for everything
+// TODO: This is not yet done.
 impl<'tcx> From<&Ty<'tcx>> for CType {
     fn from(ty: &Ty) -> Self {
         match ty.kind() {
             rustc_middle::ty::Bool => CType::Bool,
             rustc_middle::ty::Char => CType::Char,
             rustc_middle::ty::Str => CType::Array(Box::new(CType::Char), 0),
-            rustc_middle::ty::Uint(u) => CType::UInt(CUIntTy::from(u.bit_width().unwrap_or(CUIntTy::DEFAULT_BIT_WIDTH))),
-            rustc_middle::ty::Int(i) => CType::Int(CIntTy::from(i.bit_width().unwrap_or(CIntTy::DEFAULT_BIT_WIDTH))),
+            rustc_middle::ty::Uint(u) => {
+                CType::UInt(CUIntTy::from(u.bit_width().unwrap_or(CUIntTy::DEFAULT_BIT_WIDTH)))
+            }
+            rustc_middle::ty::Int(i) => {
+                CType::Int(CIntTy::from(i.bit_width().unwrap_or(CIntTy::DEFAULT_BIT_WIDTH)))
+            }
             rustc_middle::ty::Float(float) => CType::Float(CFloatTy::from(float.bit_width())),
-            rustc_middle::ty::FnPtr(s) => CType::FunctionPtr(Box::new(CFuncPtrInfo::from(s.skip_binder()))),
+            rustc_middle::ty::FnPtr(s) => {
+                CType::FunctionPtr(Box::new(CFuncPtrInfo::from(s.skip_binder())))
+            }
             rustc_middle::ty::Ref(_, ty, _) => CType::Pointer(Box::new(CType::from(ty))),
             rustc_middle::ty::Array(ty, size) => {
-                // Move value extraction to utils::try_usize or think of something better
-                CType::Array(Box::new(CType::from(ty)), size.try_to_scalar().unwrap().to_u64().unwrap().try_into().unwrap())
+                // TODO: Move value extraction to utils::try_usize or think of something better
+                CType::Array(
+                    Box::new(CType::from(ty)),
+                    size.try_to_scalar().unwrap().to_u64().unwrap().try_into().unwrap(),
+                )
             }
             rustc_middle::ty::Slice(ty) => CType::from(ty),
             rustc_middle::ty::Adt(adt, _) => match adt.adt_kind() {
                 rustc_middle::ty::AdtKind::Struct => {
                     CType::Struct(CStructInfo::from(adt.variants().iter().next().unwrap()))
-                },
+                }
                 rustc_middle::ty::AdtKind::Union => CType::Union,
                 rustc_middle::ty::AdtKind::Enum => CType::Enum,
             },
             _ => {
                 println!("printing unknown type: {:?}", ty.kind());
                 CType::Unit
-            },
+            }
         }
     }
 }

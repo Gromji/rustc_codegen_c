@@ -4,8 +4,8 @@ use crate::function::CFunction;
 
 use crate::include::Include;
 use crate::structure::CStruct;
-use crate::ty::CType;
 use crate::ty::CIntTy;
+use crate::ty::CType;
 
 pub fn build_prefix(context: &mut Context) {
     // Includes
