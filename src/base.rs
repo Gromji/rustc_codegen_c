@@ -19,7 +19,7 @@ use core::panic;
 use rustc_codegen_ssa::{CodegenResults, CompiledModule, CrateInfo};
 use rustc_metadata::EncodedMetadata;
 use rustc_middle::mir::mono::{CodegenUnit, MonoItem};
-use rustc_middle::ty::print::with_no_trimmed_paths;
+use rustc_middle::ty::{print::with_no_trimmed_paths, List, Ty};
 use rustc_session::config::{OutputFilenames, OutputType};
 use tracing_subscriber::util::SubscriberInitExt;
 
@@ -62,6 +62,19 @@ impl Context {
 
     pub fn get_mut_structs(&mut self) -> &mut Vec<structure::CStruct> {
         &mut self.structs
+    }
+    /// Get the name of a struct that has the same list of types, or create one if it doesn't exist.
+    pub fn get_struct_name(&mut self, list: &List<Ty>) -> String {
+        let cur_struct = structure::CStruct::from(list);
+        let structs = self.get_structs();
+        for s in structs {
+            if s == &cur_struct {
+                return s.get_name().clone();
+            }
+        }
+        // Struct doesn't exist, create it
+        self.get_mut_structs().push(cur_struct.clone());
+        return cur_struct.get_name().clone();
     }
 }
 
@@ -142,7 +155,7 @@ pub fn run<'tcx>(
 ) -> Box<(String, OngoingCodegen, EncodedMetadata, CrateInfo)> {
     let cgus: Vec<_> = tcx.collect_and_partition_mono_items(()).1.iter().collect();
     let mut ongoing_codegen = OngoingCodegen { context: Context::new() };
-    
+
     tracing_subscriber::FmtSubscriber::builder()
         .with_line_number(true)
         .without_time()

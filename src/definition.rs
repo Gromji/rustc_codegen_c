@@ -13,23 +13,24 @@ impl CVarDef {
     pub fn new(name: String, ty: CType) -> Self {
         Self { name, ty }
     }
+    pub fn same_type(&self, other: &CVarDef) -> bool {
+        self.ty == other.ty
+    }
 }
 
 impl Representable for CVarDef {
     fn repr(&self, f: &mut fmt::Formatter<'_>, _context: &RepresentationContext) -> fmt::Result {
-        match self.ty {
-            CType::Array(_, _) | CType::FunctionPtr(_, _) => self.ty.repr(
-                f,
-                &RepresentationContext {
-                    indent: _context.indent,
-                    indent_string: _context.indent_string.clone(),
-                    include_newline: _context.include_newline,
-                    include_comments: _context.include_comments,
-                    var_name: Some(self.name.clone()),
-                },
-            ),
-            _ => write!(f, "{:?} {}", self.ty, self.name),
-        }
+        self.ty.repr(
+            f,
+            &RepresentationContext {
+                indent: _context.indent,
+                indent_string: _context.indent_string.clone(),
+                include_newline: _context.include_newline,
+                include_comments: _context.include_comments,
+                var_name: Some(self.name.clone()),
+                ..Default::default()
+            },
+        )
     }
 }
 

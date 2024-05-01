@@ -1,9 +1,12 @@
 use crate::crepr::{Representable, RepresentationContext, Expression};
 use crate::definition::CVarDef;
 use crate::stmt::{handle_stmt, Statement};
-use crate::ty::CType;
+use crate::ty::{CStructInfo, CType};
 use crate::{base::OngoingCodegen, definition::CVarDecl};
-use rustc_middle::{mir::BasicBlockData, ty::Instance};
+use rustc_middle::{
+    mir::BasicBlockData,
+    ty::{Instance, Tuple},
+};
 use std::collections::HashSet;
 use std::fmt::{self, Debug};
 
@@ -174,7 +177,18 @@ fn handle_decls<'tcx>(
 
         let ty = decl.ty;
         let name = format!("var{}", idx);
-        let c_var = CVarDef::new(name, CType::from(&ty));
+        let c_ty: CType;
+
+        match ty.kind() {
+            Tuple(t) => {
+                let struct_name = _ongoing_codegen.context.get_struct_name(t);
+                c_ty = CType::Struct(CStructInfo::from(&struct_name));
+            }
+            _ => {
+                c_ty = CType::from(&ty);
+            }
+        }
+        let c_var = CVarDef::new(name, c_ty);
         c_fn.add_var_decl(CVarDecl::new(c_var, None));
     }
 }

@@ -1,7 +1,9 @@
 use std::fmt::{self, Debug};
 
+use crate::structure::CStruct;
+
 // TODO we could pass more information to this context, such as the current function, to allow for more context-aware representations
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, Default)]
 pub struct RepresentationContext {
     pub indent: usize,
     pub indent_string: String,
@@ -10,6 +12,7 @@ pub struct RepresentationContext {
     pub include_comments: bool,
 
     pub var_name: Option<String>,
+    pub n_ptr: u8,
 }
 
 pub trait Representable {
@@ -22,7 +25,7 @@ pub trait Representable {
                 indent_string: "\t".into(),
                 include_newline: true,
                 include_comments: true,
-                var_name: None,
+                ..Default::default()
             },
         )
     }
