@@ -39,7 +39,7 @@ fn prefix_includes() -> Vec<Include> {
         Include::new("setjmp.h".to_string(), true),
         Include::new("stdarg.h".to_string(), true),
         Include::new("locale.h".to_string(), true),
-        Include::new("wchar.h".to_string(), true),
+        Include::new("uchar.h".to_string(), true),
         Include::new("complex.h".to_string(), true),
     ]
 }
