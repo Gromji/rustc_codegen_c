@@ -40,7 +40,7 @@ impl Representable for CFunction {
 
         for (i, bb) in self.basic_blocks.iter().enumerate() {
             indent(f, context)?;
-            write!(f, "BB{}: {{\n", i)?;
+            write!(f, "bb{}: {{\n", i)?;
 
             bb.indented_repr(f, context)?;
 

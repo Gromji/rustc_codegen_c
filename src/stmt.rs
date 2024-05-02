@@ -71,8 +71,6 @@ pub fn handle_stmt<'tcx>(
 
     let statement = Statement::new(expression, format!("//{:?}", stmt).into());
 
-    // we shouldn't be pushing strings directly into the function body, we should be pushing statements
-
     span.exit();
 
     return statement;
