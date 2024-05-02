@@ -1,10 +1,6 @@
 use std::fmt::{self, Debug};
 
-use crate::{
-    crepr::Representable,
-    definition::CVarDef,
-    ty::CType,
-};
+use crate::{crepr::Representable, definition::CVarDef, ty::CType};
 use rustc_middle::ty::{List, Ty};
 
 #[derive(Clone)]

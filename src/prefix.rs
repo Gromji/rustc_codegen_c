@@ -59,7 +59,9 @@ fn prefix_functions() -> Vec<CFunction> {
     // TODO: rewrite main.push("setlocale(LC_ALL, \"\");\n", false, 1);
 
     //return 0;
-    main.push(Statement::from_expression(Expression::Return { value: Box::new(Expression::Constant { value: "0".into() }) }));
+    main.push(Statement::from_expression(Expression::Return {
+        value: Box::new(Expression::Constant { value: "0".into() }),
+    }));
 
     functions.push(main);
 
