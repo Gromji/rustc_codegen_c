@@ -1,12 +1,11 @@
-use crate::base::OngoingCodegen;
-use crate::function::CFunction;
+use crate::{base::OngoingCodegen, crepr::indent};
+use std::fmt::{self, Debug};
+use tracing::{debug, debug_span, warn};
+use crate::crepr::{self, Expression, Representable, RepresentationContext};
 use crate::utils;
 use rustc_middle::mir::{ConstOperand, ConstValue, Operand, Place, Rvalue, StatementKind};
 use rustc_middle::ty::Ty;
-use std::fmt::{self, Debug};
-use tracing::{debug, debug_span, warn};
 
-use crate::crepr::{self, add_indent, Expression, Representable, RepresentationContext};
 
 #[derive(Clone, PartialEq, Eq)]
 pub struct Statement {
@@ -32,13 +31,13 @@ impl Representable for Statement {
     fn repr(&self, f: &mut fmt::Formatter<'_>, context: &RepresentationContext) -> fmt::Result {
         if context.include_comments {
             if let Some(comment) = &self.comment {
-                add_indent(f, context)?;
+                indent(f, context)?;
                 write!(f, "/* {} */\n", comment)?;
             }
         }
 
         if let Some(expression) = &self.expression {
-            add_indent(f, context)?;
+            indent(f, context)?;
             expression.repr(f, context)?;
             write!(f, ";")?;
             if context.include_newline {
@@ -73,9 +72,7 @@ pub fn handle_stmt<'tcx>(
     };
 
     let statement = Statement::new(expression, format!("//{:?}", stmt).into());
-
-    // we shouldn't be pushing strings directly into the function body, we should be pushing statements
-
+  
     span.exit();
 
     return statement;
@@ -153,9 +150,7 @@ fn handle_constant<'tcx>(
                 unreachable!("Error: {:?}", e);
             }
         },
-
         rustc_middle::mir::Const::Val(val, ty) => handle_const_value(&val, &ty),
-
         _ => {
             warn!("Unhandled constant: {:?}", constant);
             return Expression::NoOp {};

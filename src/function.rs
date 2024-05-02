@@ -1,12 +1,10 @@
-use crate::crepr::{Expression, Representable, RepresentationContext};
+use crate::bb::{self, BasicBlock};
+use crate::crepr::{indent, Expression, Representable, RepresentationContext};
 use crate::definition::CVarDef;
-use crate::stmt::{handle_stmt, Statement};
+use crate::stmt::Statement;
 use crate::ty::{CStructInfo, CType};
 use crate::{base::OngoingCodegen, definition::CVarDecl};
-use rustc_middle::{
-    mir::BasicBlockData,
-    ty::{Instance, Tuple},
-};
+use rustc_middle::ty::{Instance, Tuple};
 use std::collections::HashSet;
 use std::fmt::{self, Debug};
 
@@ -16,23 +14,40 @@ use tracing::{debug, trace};
 pub struct CFunction {
     name: String,
     signature: Vec<CVarDef>,
-    body: FnBody,
+    local_decl: Vec<CVarDecl>,
+    basic_blocks: Vec<BasicBlock>,
     return_ty: CType,
 }
 
 impl Representable for CFunction {
-    fn repr(&self, f: &mut fmt::Formatter<'_>, _context: &RepresentationContext) -> fmt::Result {
-        self.return_ty.repr(f, _context)?;
+    fn repr(&self, f: &mut fmt::Formatter<'_>, context: &RepresentationContext) -> fmt::Result {
+        self.return_ty.repr(f, context)?;
         write!(f, " {}(", self.name)?;
         for (i, arg) in self.signature.iter().enumerate() {
             if i > 0 {
                 write!(f, ", ")?;
             }
-            arg.repr(f, _context)?;
+            arg.repr(f, context)?;
         }
         write!(f, ") ")?;
 
-        self.body.repr(f, _context)
+        write!(f, "{{\n")?;
+        for decl in &self.local_decl {
+            indent(f, context)?;
+            decl.repr(f, context)?;
+            write!(f, "\n")?;
+        }
+
+        for (i, bb) in self.basic_blocks.iter().enumerate() {
+            indent(f, context)?;
+            write!(f, "bb{}: {{\n", i)?;
+
+            bb.indented_repr(f, context)?;
+
+            indent(f, context)?;
+            write!(f, "}}\n")?;
+        }
+        write!(f, "}}")
     }
 }
 
@@ -44,15 +59,21 @@ impl Debug for CFunction {
 
 impl CFunction {
     pub fn new(name: String, return_ty: CType) -> Self {
-        Self { name: name, signature: Vec::new(), body: FnBody::new(), return_ty: return_ty }
+        Self {
+            name: name,
+            signature: Vec::new(),
+            local_decl: Vec::new(),
+            basic_blocks: Vec::new(),
+            return_ty: return_ty,
+        }
     }
 
     pub fn is_main(&self) -> bool {
         self.name == "main"
     }
 
-    pub fn push(&mut self, stmt: Statement) {
-        self.body.push(stmt);
+    pub fn push_bb(&mut self, bb: BasicBlock) {
+        self.basic_blocks.push(bb);
     }
 
     pub fn as_prototype(&self) -> String {
@@ -72,65 +93,12 @@ impl CFunction {
     }
 
     pub fn add_var_decl(&mut self, var: CVarDecl) {
-        self.body.add_local_var(var);
+        self.local_decl.push(var);
     }
 
     #[allow(dead_code)]
     pub fn validate_fn(&self) -> bool {
         todo!("TODO: Would be a good idea to have some kind of validation")
-    }
-}
-
-#[derive(Clone, PartialEq, Eq)]
-pub struct FnBody {
-    local_decl: Vec<CVarDecl>,
-    body: Vec<Statement>,
-}
-
-impl Representable for FnBody {
-    fn repr(&self, f: &mut fmt::Formatter<'_>, _context: &RepresentationContext) -> fmt::Result {
-        write!(f, "{{\n")?;
-        for decl in &self.local_decl {
-            write!(f, "{}", _context.indent_string.as_str().repeat(_context.indent))?;
-            decl.repr(f, _context)?;
-            write!(f, "\n")?;
-        }
-
-        for stmt in &self.body {
-            stmt.repr(f, _context)?;
-        }
-
-        write!(f, "}}")
-    }
-}
-
-impl Debug for FnBody {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        self.default_repr(f)
-    }
-}
-
-impl FnBody {
-    pub fn new() -> Self {
-        Self { local_decl: Vec::new(), body: Vec::new() }
-    }
-
-    #[allow(dead_code)]
-    pub fn is_empty(&self) -> bool {
-        self.body.is_empty()
-    }
-
-    pub fn push(&mut self, stmt: Statement) {
-        self.body.push(stmt);
-    }
-
-    pub fn add_local_var(&mut self, var: CVarDecl) {
-        self.local_decl.push(var);
-    }
-
-    #[allow(dead_code)]
-    pub fn clear(&mut self) {
-        self.body.clear();
     }
 }
 
@@ -193,27 +161,6 @@ fn handle_decls<'tcx>(
     }
 }
 
-fn handle_bbs<'tcx>(
-    tcx: rustc_middle::ty::TyCtxt<'tcx>,
-    ongoing_codegen: &mut OngoingCodegen,
-    mir: &rustc_middle::mir::Body<'tcx>,
-    c_fn: &mut CFunction,
-) {
-    let blocks = &mir.basic_blocks;
-    for (_last_bb_id, block_data) in blocks.into_iter().enumerate() {
-        let block_data: &BasicBlockData = block_data;
-
-        let statements: &Vec<rustc_middle::mir::Statement<'_>> = &block_data.statements;
-
-        // Print basic block for debugging. TODO should probably depend on a cli argument.
-        c_fn.push(Statement::from_comment(format!("Basic Block: {:?}", block_data)));
-
-        for stmt in statements {
-            c_fn.push(handle_stmt(tcx, ongoing_codegen, stmt));
-        }
-    }
-}
-
 #[allow(unused_variables)]
 pub fn handle_fn<'tcx>(
     tcx: rustc_middle::ty::TyCtxt<'tcx>,
@@ -232,12 +179,15 @@ pub fn handle_fn<'tcx>(
     trace!("{:?}", c_fn);
 
     // Handle basic blocks
-    handle_bbs(tcx, ongoing_codegen, mir, &mut c_fn);
+    bb::handle_bbs(tcx, ongoing_codegen, mir, &mut c_fn);
 
-    // equivalent to return var0, since we are not handling return values yet
-    c_fn.push(Statement::from_expression(Expression::Return {
+    let mut bb = BasicBlock::new();
+    bb.push(Statement::from_expression(Expression::Return {
         value: Box::new(Expression::Variable { local: 0 }),
     }));
+
+    // equivalent to return var0, since we are not handling return values yet
+    c_fn.push_bb(bb);
 
     // If is main prefix with "_"
     if c_fn.is_main() {

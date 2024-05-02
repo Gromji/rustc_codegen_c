@@ -1,6 +1,9 @@
 use std::fmt::{self, Debug};
-
-use crate::{crepr::Representable, definition::CVarDef, ty::CType};
+use crate::{
+    crepr::{indent, Representable},
+    definition::CVarDef,
+    ty::CType,
+};
 use rustc_middle::ty::{List, Ty};
 
 #[derive(Clone)]
@@ -55,12 +58,12 @@ impl Representable for CStruct {
     fn repr(
         &self,
         f: &mut std::fmt::Formatter<'_>,
-        _context: &crate::crepr::RepresentationContext,
+        context: &crate::crepr::RepresentationContext,
     ) -> std::fmt::Result {
         write!(f, "struct {} {{\n", self.name)?;
         for field in &self.fields {
-            write!(f, "{}", _context.indent_string.as_str().repeat(_context.indent))?;
-            field.repr(f, _context)?;
+            indent(f, context)?;
+            field.repr(f, context)?;
             write!(f, ";\n")?;
         }
         write!(f, "}};")
