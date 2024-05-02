@@ -20,6 +20,7 @@ use rustc_session::Session;
 use std::{any::Any, path::Path};
 
 mod base;
+mod bb;
 mod crepr;
 mod definition;
 mod function;

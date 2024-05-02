@@ -1,4 +1,5 @@
 use crate::base::Context;
+use crate::bb::BasicBlock;
 use crate::definition::CVarDef;
 use crate::function::CFunction;
 
@@ -58,8 +59,13 @@ fn prefix_functions() -> Vec<CFunction> {
 
     // TODO: rewrite main.push("setlocale(LC_ALL, \"\");\n", false, 1);
 
+    let mut bb = BasicBlock::new();
+    bb.push(Statement::from_expression(Expression::Return {
+        value: Box::new(Expression::Constant { value: "0".into() }),
+    }));
+
     //return 0;
-    main.push(Statement::from_expression(Expression::Return { value: Box::new(Expression::Constant { value: "0".into() }) }));
+    main.push_bb(bb);
 
     functions.push(main);
 

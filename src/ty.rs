@@ -107,7 +107,7 @@ impl Representable for CType {
             // Incorrectly implemented, needs fix!
             CType::Enum => {
                 let ptrs = "*".repeat(context.n_ptr.into());
-                let c_type = format!("enum{}", ptrs);
+                let _c_type = format!("enum{}", ptrs);
                 match &context.var_name {
                     Some(name) => write!(f, "enum {name}"),
                     None => write!(f, "enum"),
@@ -135,7 +135,7 @@ impl Representable for CType {
                 }
             }
             CType::FunctionPtr(func_info) => {
-                let mut child_context: RepresentationContext = Default::default();
+                let child_context: RepresentationContext = Default::default();
                 func_info.ret.repr(f, &child_context)?;
                 match &context.var_name {
                     Some(name) => write!(f, " (*{})(", name)?,
@@ -160,16 +160,7 @@ impl Representable for CType {
 
 impl Debug for CType {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        self.repr(
-            f,
-            &crate::crepr::RepresentationContext {
-                indent: 1,
-                indent_string: "\t".into(),
-                include_newline: true,
-                include_comments: true,
-                ..Default::default()
-            },
-        )
+        self.default_repr(f)
     }
 }
 #[derive(Debug, Clone, PartialEq, Eq)]

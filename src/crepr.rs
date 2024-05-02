@@ -1,7 +1,5 @@
 use std::fmt::{self, Debug};
 
-use crate::structure::CStruct;
-
 // TODO we could pass more information to this context, such as the current function, to allow for more context-aware representations
 #[derive(Debug, Clone, Default)]
 pub struct RepresentationContext {
@@ -28,6 +26,13 @@ pub trait Representable {
                 ..Default::default()
             },
         )
+    }
+    fn indented_repr(
+        &self,
+        f: &mut fmt::Formatter<'_>,
+        context: &RepresentationContext,
+    ) -> fmt::Result {
+        self.repr(f, &RepresentationContext { indent: context.indent + 1, ..context.clone() })
     }
 }
 
@@ -214,9 +219,6 @@ impl Representable for Expression {
     }
 }
 
-pub fn add_indent(f: &mut fmt::Formatter<'_>, context: &RepresentationContext) -> fmt::Result {
-    for _ in 0..context.indent {
-        write!(f, "{}", context.indent_string)?;
-    }
-    Ok(())
+pub fn indent(f: &mut fmt::Formatter<'_>, context: &RepresentationContext) -> fmt::Result {
+    write!(f, "{}", context.indent_string.as_str().repeat(context.indent))
 }

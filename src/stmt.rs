@@ -1,10 +1,9 @@
-use crate::base::OngoingCodegen;
-use crate::function::CFunction;
+use crate::{base::OngoingCodegen, crepr::indent};
 use rustc_middle::mir::{ConstOperand, Operand, Place, Rvalue, StatementKind};
 use std::fmt::{self, Debug};
 use tracing::{debug, debug_span, warn};
 
-use crate::crepr::{self, Expression, RepresentationContext, Representable, add_indent};
+use crate::crepr::{self, Expression, Representable, RepresentationContext};
 
 #[derive(Clone, PartialEq, Eq)]
 pub struct Statement {
@@ -30,13 +29,13 @@ impl Representable for Statement {
     fn repr(&self, f: &mut fmt::Formatter<'_>, context: &RepresentationContext) -> fmt::Result {
         if context.include_comments {
             if let Some(comment) = &self.comment {
-                add_indent(f, context)?;
+                indent(f, context)?;
                 write!(f, "/* {} */\n", comment)?;
             }
         }
-        
+
         if let Some(expression) = &self.expression {
-            add_indent(f, context)?;
+            indent(f, context)?;
             expression.repr(f, context)?;
             write!(f, ";")?;
             if context.include_newline {
@@ -58,7 +57,7 @@ pub fn handle_stmt<'tcx>(
     tcx: rustc_middle::ty::TyCtxt<'tcx>,
     ongoing_codegen: &mut OngoingCodegen,
     stmt: &rustc_middle::mir::Statement<'tcx>,
-)-> Statement {
+) -> Statement {
     let span = debug_span!("handle_stmt").entered();
 
     debug!("Statement: {:?}", stmt);
@@ -70,7 +69,7 @@ pub fn handle_stmt<'tcx>(
         _ => crepr::Expression::NoOp {},
     };
 
-    let statement = Statement::new(expression,format!("//{:?}", stmt).into());
+    let statement = Statement::new(expression, format!("//{:?}", stmt).into());
 
     // we shouldn't be pushing strings directly into the function body, we should be pushing statements
 
@@ -144,7 +143,7 @@ fn handle_constant<'tcx>(
     constant: &ConstOperand<'tcx>,
 ) -> Expression {
     match constant.const_ {
-        rustc_middle::mir::Const::Unevaluated(c, t) => {
+        rustc_middle::mir::Const::Unevaluated(c, _t) => {
             match tcx.const_eval_poly(c.def) {
                 Ok(val) => {
                     return Expression::Constant { value: format!("{:?}", val).into() }; // todo handle this better
@@ -156,7 +155,7 @@ fn handle_constant<'tcx>(
             }
         }
 
-        rustc_middle::mir::Const::Val(val, ty) => match val {
+        rustc_middle::mir::Const::Val(val, _ty) => match val {
             rustc_middle::mir::ConstValue::Scalar(scalar) => match scalar {
                 rustc_const_eval::interpret::Scalar::Int(i) => {
                     return Expression::Constant { value: format!("{:?}", i).into() };
