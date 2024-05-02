@@ -1,4 +1,4 @@
-use crate::crepr::{Representable, RepresentationContext, Expression};
+use crate::crepr::{Expression, Representable, RepresentationContext};
 use crate::definition::CVarDef;
 use crate::stmt::{handle_stmt, Statement};
 use crate::ty::{CStructInfo, CType};
@@ -235,7 +235,9 @@ pub fn handle_fn<'tcx>(
     handle_bbs(tcx, ongoing_codegen, mir, &mut c_fn);
 
     // equivalent to return var0, since we are not handling return values yet
-    c_fn.push(Statement::from_expression(Expression::Return { value: Box::new(Expression::Variable { local: 0 }) }));
+    c_fn.push(Statement::from_expression(Expression::Return {
+        value: Box::new(Expression::Variable { local: 0 }),
+    }));
 
     // If is main prefix with "_"
     if c_fn.is_main() {
