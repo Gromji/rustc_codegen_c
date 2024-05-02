@@ -1,9 +1,11 @@
 use crate::{base::OngoingCodegen, crepr::indent};
-use rustc_middle::mir::{ConstOperand, Operand, Place, Rvalue, StatementKind};
 use std::fmt::{self, Debug};
 use tracing::{debug, debug_span, warn};
-
 use crate::crepr::{self, Expression, Representable, RepresentationContext};
+use crate::utils;
+use rustc_middle::mir::{ConstOperand, ConstValue, Operand, Place, Rvalue, StatementKind};
+use rustc_middle::ty::Ty;
+
 
 #[derive(Clone, PartialEq, Eq)]
 pub struct Statement {
@@ -70,7 +72,7 @@ pub fn handle_stmt<'tcx>(
     };
 
     let statement = Statement::new(expression, format!("//{:?}", stmt).into());
-
+  
     span.exit();
 
     return statement;
@@ -141,35 +143,35 @@ fn handle_constant<'tcx>(
     constant: &ConstOperand<'tcx>,
 ) -> Expression {
     match constant.const_ {
-        rustc_middle::mir::Const::Unevaluated(c, _t) => {
-            match tcx.const_eval_poly(c.def) {
-                Ok(val) => {
-                    return Expression::Constant { value: format!("{:?}", val).into() }; // todo handle this better
-                }
+        rustc_middle::mir::Const::Unevaluated(c, t) => match tcx.const_eval_poly(c.def) {
+            Ok(val) => handle_const_value(&val, &t),
 
-                Err(e) => {
-                    unreachable!("Error: {:?}", e);
-                }
+            Err(e) => {
+                unreachable!("Error: {:?}", e);
             }
+        },
+        rustc_middle::mir::Const::Val(val, ty) => handle_const_value(&val, &ty),
+        _ => {
+            warn!("Unhandled constant: {:?}", constant);
+            return Expression::NoOp {};
         }
+    }
+}
 
-        rustc_middle::mir::Const::Val(val, _ty) => match val {
-            rustc_middle::mir::ConstValue::Scalar(scalar) => match scalar {
-                rustc_const_eval::interpret::Scalar::Int(i) => {
-                    return Expression::Constant { value: format!("{:?}", i).into() };
-                }
-
-                rustc_const_eval::interpret::Scalar::Ptr(_, _) => todo!("Ptr"),
-            },
-
-            _ => {
-                warn!("Unhandled constant: {:?}", val);
-                return Expression::NoOp {};
+fn handle_const_value<'tcx>(val: &ConstValue, _ty: &Ty) -> Expression {
+    match val {
+        rustc_middle::mir::ConstValue::Scalar(scalar) => match scalar {
+            rustc_const_eval::interpret::Scalar::Int(i) => {
+                return Expression::Constant {
+                    value: format!("{}", utils::scalar_to_u128(&scalar)),
+                }; // todo handle this better
             }
+
+            rustc_const_eval::interpret::Scalar::Ptr(_, _) => todo!("Ptr"),
         },
 
         _ => {
-            warn!("Unhandled constant: {:?}", constant);
+            warn!("Unhandled constant: {:?}", val);
             return Expression::NoOp {};
         }
     }

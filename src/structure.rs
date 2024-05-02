@@ -1,5 +1,4 @@
 use std::fmt::{self, Debug};
-
 use crate::{
     crepr::{indent, Representable},
     definition::CVarDef,

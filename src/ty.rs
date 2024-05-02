@@ -4,6 +4,8 @@ use rustc_middle::ty::{FnSig, Ty, VariantDef};
 
 use crate::crepr::{Representable, RepresentationContext};
 
+use crate::utils;
+
 #[derive(Clone, PartialEq, Eq)]
 #[allow(dead_code)]
 pub enum CType {
@@ -341,10 +343,7 @@ impl<'tcx> From<&Ty<'tcx>> for CType {
             rustc_middle::ty::Ref(_, ty, _) => CType::Pointer(Box::new(CType::from(ty))),
             rustc_middle::ty::Array(ty, size) => {
                 // TODO: Move value extraction to utils::try_usize or think of something better
-                CType::Array(
-                    Box::new(CType::from(ty)),
-                    size.try_to_scalar().unwrap().to_u64().unwrap().try_into().unwrap(),
-                )
+                CType::Array(Box::new(CType::from(ty)), utils::const_to_usize(size))
             }
             rustc_middle::ty::Slice(ty) => CType::from(ty),
             rustc_middle::ty::Adt(adt, _) => match adt.adt_kind() {
