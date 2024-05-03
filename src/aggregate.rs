@@ -5,6 +5,7 @@ use crate::stmt::handle_operand;
 use crate::ty::{CStructInfo, CType};
 use crate::{base::OngoingCodegen, crepr::indent};
 use rustc_middle::mir::{AggregateKind, Operand, Place, Rvalue, StatementKind};
+use rustc_span::def_id::DefId;
 use tracing::{debug, debug_span, warn};
 pub fn handle_aggregate<'tcx, I>(
     tcx: rustc_middle::ty::TyCtxt<'tcx>,
@@ -17,10 +18,12 @@ pub fn handle_aggregate<'tcx, I>(
 where
     I: 'tcx + Iterator<Item = &'tcx Operand<'tcx>>,
 {
+    let span = debug_span!("handle_aggregate").entered();
     let var_idx = place.local.as_usize();
     let local_var = c_fn.get_local_var(var_idx);
-    match *kind {
-        AggregateKind::Tuple => match local_var.get_var_type() {
+    let var_type = local_var.get_var_type();
+    let result = match *kind {
+        AggregateKind::Tuple => match var_type {
             CType::Struct(struct_info) => {
                 let mut field_expressions = Vec::new();
                 for field in fields {
@@ -53,9 +56,31 @@ where
 
             crepr::Expression::Array { fields: field_expressions }
         }
+        AggregateKind::Adt(def_id, variant_idx, args_ref, _a, _b) => match var_type {
+            CType::Struct(struct_info) => {
+                let mut field_expressions = Vec::new();
+                for (i, field) in fields.enumerate() {
+                    let expression = handle_operand(tcx, ongoing_codegen, &field);
+                    field_expressions.push(expression);
+                }
+
+                let rhs = crepr::Expression::Struct {
+                    name: struct_info.name.clone(),
+                    fields: field_expressions,
+                };
+                let lhs = crepr::Expression::Variable { local: var_idx, idx: None };
+                crepr::Expression::Assignment { lhs: Box::new(lhs), rhs: Box::new(rhs) }
+            }
+            _ => {
+                warn!("Unhandled aggregate kind: {:?}", kind);
+                crepr::Expression::NoOp {}
+            }
+        },
         _ => {
             warn!("Unhandled aggregate kind: {:?}", kind);
             crepr::Expression::NoOp {}
         }
-    }
+    };
+    span.exit();
+    result
 }
