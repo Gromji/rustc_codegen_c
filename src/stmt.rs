@@ -1,11 +1,12 @@
-use crate::{base::OngoingCodegen, crepr::indent};
-use std::fmt::{self, Debug};
-use tracing::{debug, debug_span, warn};
+use crate::aggregate::handle_aggregate;
 use crate::crepr::{self, Expression, Representable, RepresentationContext};
+use crate::function::CFunction;
 use crate::utils;
+use crate::{base::OngoingCodegen, crepr::indent};
 use rustc_middle::mir::{ConstOperand, ConstValue, Operand, Place, Rvalue, StatementKind};
 use rustc_middle::ty::Ty;
-
+use std::fmt::{self, Debug};
+use tracing::{debug, debug_span, warn};
 
 #[derive(Clone, PartialEq, Eq)]
 pub struct Statement {
@@ -58,7 +59,8 @@ impl Debug for Statement {
 pub fn handle_stmt<'tcx>(
     tcx: rustc_middle::ty::TyCtxt<'tcx>,
     ongoing_codegen: &mut OngoingCodegen,
-    stmt: &rustc_middle::mir::Statement<'tcx>,
+    c_fn: &CFunction,
+    stmt: &'tcx rustc_middle::mir::Statement<'tcx>,
 ) -> Statement {
     let span = debug_span!("handle_stmt").entered();
 
@@ -66,19 +68,19 @@ pub fn handle_stmt<'tcx>(
     debug!("Kind: {:?}", stmt.kind);
 
     let expression = match &stmt.kind {
-        StatementKind::Assign(val) => handle_assign(tcx, ongoing_codegen, &val.0, &val.1),
+        StatementKind::Assign(val) => handle_assign(tcx, ongoing_codegen, c_fn, &val.0, &val.1),
 
         _ => crepr::Expression::NoOp {},
     };
 
     let statement = Statement::new(expression, format!("//{:?}", stmt).into());
-  
+
     span.exit();
 
     return statement;
 }
 
-fn handle_operand<'tcx>(
+pub fn handle_operand<'tcx>(
     tcx: rustc_middle::ty::TyCtxt<'tcx>,
     ongoing_codegen: &mut OngoingCodegen,
     operand: &Operand<'tcx>,
@@ -95,8 +97,9 @@ fn handle_operand<'tcx>(
 fn handle_assign<'tcx>(
     tcx: rustc_middle::ty::TyCtxt<'tcx>,
     ongoing_codegen: &mut OngoingCodegen,
+    c_fn: &CFunction,
     place: &Place<'tcx>,
-    rvalue: &Rvalue<'tcx>,
+    rvalue: &'tcx Rvalue<'tcx>,
 ) -> crepr::Expression {
     let span = debug_span!("handle_assign").entered();
     debug!("place( {:?} )", place);
@@ -121,6 +124,9 @@ fn handle_assign<'tcx>(
                 lhs: Box::new(lhs),
                 rhs: Box::new(rhs),
             }
+        }
+        Rvalue::Aggregate(kind, fields) => {
+            handle_aggregate(tcx, ongoing_codegen, c_fn, place, kind, fields.iter())
         }
 
         _ => {

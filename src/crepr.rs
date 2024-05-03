@@ -141,6 +141,7 @@ pub enum Expression {
     BinaryOp { op: BinOpType, lhs: Box<Expression>, rhs: Box<Expression> },
     CheckedBinaryOp { op: BinOpType, lhs: Box<Expression>, rhs: Box<Expression> },
     UnaryOp { op: UnaryOpType, val: Box<Expression> },
+    Struct { name: String, fields: Vec<Expression> },
     Return { value: Box<Expression> },
     NoOp {},
 }
@@ -200,6 +201,18 @@ impl Representable for Expression {
                 op.repr(f, context)?;
                 val.repr(f, context)?;
                 Ok(())
+            }
+
+            Expression::Struct { name, fields } => {
+                // (struct {}){ {} } (eg. (struct {}) { {1}, {2} })
+                write!(f, "(struct {}){{ ", name)?;
+                for (i, field) in fields.iter().enumerate() {
+                    if i != 0 {
+                        write!(f, ", ")?;
+                    }
+                    field.repr(f, context)?;
+                }
+                write!(f, " }}")
             }
 
             Expression::NoOp {} => {

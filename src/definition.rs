@@ -51,6 +51,9 @@ impl CVarDecl {
     pub fn new(var: CVarDef, value: Option<String>) -> Self {
         Self { var, value }
     }
+    pub fn get_var_type(&self) -> &CType {
+        &self.var.ty
+    }
 }
 
 impl Representable for CVarDecl {

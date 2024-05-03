@@ -51,7 +51,7 @@ impl Debug for BasicBlock {
 pub fn handle_bbs<'tcx>(
     tcx: rustc_middle::ty::TyCtxt<'tcx>,
     ongoing_codegen: &mut OngoingCodegen,
-    mir: &rustc_middle::mir::Body<'tcx>,
+    mir: &'tcx rustc_middle::mir::Body<'tcx>,
     c_fn: &mut CFunction,
 ) {
     let blocks = &mir.basic_blocks;
@@ -66,7 +66,7 @@ pub fn handle_bbs<'tcx>(
         n_bb.push(Statement::from_comment(format!("Basic Block: {:?}", block_data)));
 
         for stmt in statements {
-            n_bb.push(handle_stmt(tcx, ongoing_codegen, stmt));
+            n_bb.push(handle_stmt(tcx, ongoing_codegen, c_fn, stmt));
         }
 
         c_fn.push_bb(n_bb);

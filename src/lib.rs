@@ -19,6 +19,7 @@ use rustc_metadata::EncodedMetadata;
 use rustc_session::Session;
 use std::{any::Any, path::Path};
 
+mod aggregate;
 mod base;
 mod bb;
 mod crepr;

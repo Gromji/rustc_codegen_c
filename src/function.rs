@@ -96,6 +96,10 @@ impl CFunction {
         self.local_decl.push(var);
     }
 
+    pub fn get_local_decl(&self, idx: usize) -> &CVarDecl {
+        &self.local_decl[idx]
+    }
+
     #[allow(dead_code)]
     pub fn validate_fn(&self) -> bool {
         todo!("TODO: Would be a good idea to have some kind of validation")
