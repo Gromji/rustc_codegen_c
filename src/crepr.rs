@@ -1,3 +1,4 @@
+use crate::ty::CType;
 use std::fmt::{self, Debug};
 
 // TODO we could pass more information to this context, such as the current function, to allow for more context-aware representations
@@ -136,12 +137,13 @@ pub struct Constant {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Expression {
     Constant { value: String },
-    Variable { local: usize }, // TODO this might not be an appropriate representation, especially if we plan to add debug info into the mix
+    Variable { local: usize, idx: Option<usize> }, // TODO this might not be an appropriate representation, especially if we plan to add debug info into the mix
     Assignment { lhs: Box<Expression>, rhs: Box<Expression> },
     BinaryOp { op: BinOpType, lhs: Box<Expression>, rhs: Box<Expression> },
     CheckedBinaryOp { op: BinOpType, lhs: Box<Expression>, rhs: Box<Expression> },
     UnaryOp { op: UnaryOpType, val: Box<Expression> },
     Struct { name: String, fields: Vec<Expression> },
+    Array { fields: Vec<Expression> },
     Return { value: Box<Expression> },
     NoOp {},
 }
@@ -153,9 +155,14 @@ impl Representable for Expression {
                 write!(f, "{}", value)
             }
 
-            Expression::Variable { local } => {
-                write!(f, "var{}", local)
-            }
+            Expression::Variable { local, idx } => match idx {
+                Some(idx) => {
+                    write!(f, "var{}[{}]", local, idx)
+                }
+                None => {
+                    write!(f, "var{}", local)
+                }
+            },
 
             Expression::Assignment { lhs, rhs } => {
                 // {} = {}
@@ -204,7 +211,7 @@ impl Representable for Expression {
             }
 
             Expression::Struct { name, fields } => {
-                // (struct {}){ {} } (eg. (struct {}) { {1}, {2} })
+                // (struct {}){ {} } (eg. (struct struct_name) { {1}, {2} })
                 write!(f, "(struct {}){{ ", name)?;
                 for (i, field) in fields.iter().enumerate() {
                     if i != 0 {
@@ -213,6 +220,16 @@ impl Representable for Expression {
                     field.repr(f, context)?;
                 }
                 write!(f, " }}")
+            }
+            Expression::Array { fields } => {
+                // {}, {}, ..., {}; (eg. {var1[0]=1}, {var1[1]=2}, {var1[2]=5};)
+                for (i, field) in fields.iter().enumerate() {
+                    if i != 0 {
+                        write!(f, ", ")?;
+                    }
+                    field.repr(f, context)?;
+                }
+                Ok(())
             }
 
             Expression::NoOp {} => {

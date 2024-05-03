@@ -86,9 +86,9 @@ pub fn handle_operand<'tcx>(
     operand: &Operand<'tcx>,
 ) -> crepr::Expression {
     match operand {
-        Operand::Copy(place) => Expression::Variable { local: place.local.as_usize() },
+        Operand::Copy(place) => Expression::Variable { local: place.local.as_usize(), idx: None },
         // move operations can be treated as a copy operation (I think)
-        Operand::Move(place) => Expression::Variable { local: place.local.as_usize() },
+        Operand::Move(place) => Expression::Variable { local: place.local.as_usize(), idx: None },
 
         Operand::Constant(constant) => handle_constant(tcx, ongoing_codegen, constant),
     }
@@ -126,7 +126,8 @@ fn handle_assign<'tcx>(
             }
         }
         Rvalue::Aggregate(kind, fields) => {
-            handle_aggregate(tcx, ongoing_codegen, c_fn, place, kind, fields.iter())
+            // Return instantly because it already handles assignments.
+            return handle_aggregate(tcx, ongoing_codegen, c_fn, place, kind, fields.iter());
         }
 
         _ => {
@@ -138,7 +139,7 @@ fn handle_assign<'tcx>(
     span.exit();
 
     return crepr::Expression::Assignment {
-        lhs: Box::new(crepr::Expression::Variable { local: place.local.as_usize() }),
+        lhs: Box::new(crepr::Expression::Variable { local: place.local.as_usize(), idx: None }),
         rhs: Box::new(expression),
     };
 }

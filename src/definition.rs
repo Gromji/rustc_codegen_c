@@ -16,6 +16,9 @@ impl CVarDef {
     pub fn same_type(&self, other: &CVarDef) -> bool {
         self.ty == other.ty
     }
+    pub fn get_name(&self) -> String {
+        self.name.clone()
+    }
 }
 
 impl Representable for CVarDef {
@@ -53,6 +56,9 @@ impl CVarDecl {
     }
     pub fn get_var_type(&self) -> &CType {
         &self.var.ty
+    }
+    pub fn get_name(&self) -> String {
+        self.var.get_name()
     }
 }
 

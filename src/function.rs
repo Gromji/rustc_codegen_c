@@ -96,8 +96,11 @@ impl CFunction {
         self.local_decl.push(var);
     }
 
-    pub fn get_local_decl(&self, idx: usize) -> &CVarDecl {
+    pub fn get_local_var(&self, idx: usize) -> &CVarDecl {
         &self.local_decl[idx]
+    }
+    pub fn get_local_var_name(&self, idx: usize) -> String {
+        self.local_decl[idx].get_name()
     }
 
     #[allow(dead_code)]
@@ -187,7 +190,7 @@ pub fn handle_fn<'tcx>(
 
     let mut bb = BasicBlock::new();
     bb.push(Statement::from_expression(Expression::Return {
-        value: Box::new(Expression::Variable { local: 0 }),
+        value: Box::new(Expression::Variable { local: 0, idx: None }),
     }));
 
     // equivalent to return var0, since we are not handling return values yet
