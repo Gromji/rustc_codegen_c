@@ -78,7 +78,7 @@ pub fn handle_stmt<'tcx>(
     return statement;
 }
 
-fn handle_operand<'tcx>(
+pub fn handle_operand<'tcx>(
     tcx: rustc_middle::ty::TyCtxt<'tcx>,
     ongoing_codegen: &mut OngoingCodegen,
     operand: &Operand<'tcx>,
@@ -137,7 +137,7 @@ fn handle_assign<'tcx>(
     };
 }
 
-fn handle_constant<'tcx>(
+pub fn handle_constant<'tcx>(
     tcx: rustc_middle::ty::TyCtxt<'tcx>,
     _ongoing_codegen: &mut OngoingCodegen,
     constant: &ConstOperand<'tcx>,
@@ -151,6 +151,7 @@ fn handle_constant<'tcx>(
             }
         },
         rustc_middle::mir::Const::Val(val, ty) => handle_const_value(&val, &ty),
+        
         _ => {
             warn!("Unhandled constant: {:?}", constant);
             return Expression::NoOp {};
@@ -170,6 +171,10 @@ fn handle_const_value<'tcx>(val: &ConstValue, _ty: &Ty) -> Expression {
             rustc_const_eval::interpret::Scalar::Ptr(_, _) => todo!("Ptr"),
         },
 
+        rustc_middle::mir::ConstValue::ZeroSized => {
+            // Function names end up here, no easy way to extract the name, we need better constant handling
+            return Expression::Constant { value: "0".into() };
+        }
         _ => {
             warn!("Unhandled constant: {:?}", val);
             return Expression::NoOp {};

@@ -39,14 +39,9 @@ impl Representable for CFunction {
         }
 
         for (i, bb) in self.basic_blocks.iter().enumerate() {
-            indent(f, context)?;
-            write!(f, "bb{}: {{\n", i)?;
-
-            bb.indented_repr(f, context)?;
-
-            indent(f, context)?;
-            write!(f, "}}\n")?;
+            bb.repr(f, context)?;
         }
+        
         write!(f, "}}")
     }
 }
@@ -181,13 +176,6 @@ pub fn handle_fn<'tcx>(
     // Handle basic blocks
     bb::handle_bbs(tcx, ongoing_codegen, mir, &mut c_fn);
 
-    let mut bb = BasicBlock::new();
-    bb.push(Statement::from_expression(Expression::Return {
-        value: Box::new(Expression::Variable { local: 0 }),
-    }));
-
-    // equivalent to return var0, since we are not handling return values yet
-    c_fn.push_bb(bb);
 
     // If is main prefix with "_"
     if c_fn.is_main() {
