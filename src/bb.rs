@@ -1,15 +1,13 @@
 use std::fmt::{self, Debug};
 
-use crate::base::OngoingCodegen;
 use crate::crepr::{indent, Expression, Representable, UnaryOpType};
-use crate::function::CFunction;
-use crate::stmt::{handle_operand, handle_stmt, handle_constant, Statement};
-use crate::utils::scalar_to_u128;
+use crate::function::{format_fn_name, CFunction, CodegenFunctionCx};
+use crate::stmt::{handle_operand, handle_stmt, Statement};
 use rustc_middle::mir::BasicBlockData;
 use rustc_middle::mir::Operand;
 use rustc_middle::mir::TerminatorKind;
 use rustc_span::source_map::Spanned;
-use tracing::{debug, debug_span, warn};
+use tracing::{debug, debug_span, warn, error};
 
 #[derive(Clone, PartialEq, Eq)]
 pub struct BasicBlockIdentifier(pub usize);
@@ -89,9 +87,8 @@ impl Debug for BasicBlock {
     }
 }
 
-fn handle_function_call<'tcx>(
-    tcx: rustc_middle::ty::TyCtxt<'tcx>,
-    ongoing_codegen: &mut OngoingCodegen,
+fn handle_function_call<'tcx, 'ccx>(
+    fn_cx: &CodegenFunctionCx<'tcx, 'ccx>,
     func: Operand<'tcx>,
     args: Vec<Spanned<Operand<'tcx>>>,
     destination: rustc_middle::mir::Place<'tcx>,
@@ -100,11 +97,33 @@ fn handle_function_call<'tcx>(
 
     match func {
         Operand::Constant(ref constant) => {
-            warn!("Unimplemented function call: {:?}", func);
+
+            let ty = fn_cx.monomorphize(constant.ty());
+
+            let const_expr = match ty.kind() {
+                rustc_middle::ty::TyKind::FnDef(def_id, substs) => {
+                    let instance = rustc_middle::ty::Instance::resolve(fn_cx.tcx, rustc_middle::ty::ParamEnv::reveal_all(), *def_id, substs).unwrap();
+                    if let Some(instance) = instance {
+                        
+                        Expression::Constant { value: format_fn_name(&fn_cx.tcx.symbol_name(instance))}
+                    
+                    } else {
+                        error!("Instance not found for {:?}", constant);
+                        
+                        Expression::Constant { value: format!("Instance not found for {:?}", constant) }
+                    }
+                }
+
+                _ => {
+                    warn!("Unimplemented function call: {:?}", func);
+
+                    Expression::Constant { value: format!("Unimplemented func call {:?}", func)}
+                }
+            };
 
             let fn_call = Expression::FnCall {
-                function: Box::new(handle_constant( tcx, ongoing_codegen, &constant)),
-                args: args.iter().map(|arg| handle_operand(tcx, ongoing_codegen, &arg.node)).collect(),
+                function: Box::new(const_expr),
+                args: args.iter().map(|arg| handle_operand(fn_cx, &arg.node)).collect(),
             };
 
             return Statement::from_expression(Expression::Assignment {
@@ -122,27 +141,14 @@ fn handle_function_call<'tcx>(
             return stmt;
         }
     }
-
-    // match func
-
-    // let call_expression = Expression::FnCall {
-    //     name: func.
-    //     args: args.iter().map(|arg| handle_operand(tcx, ongoing_codegen, arg)).collect(),
-    // };
-
-    // // NOTE: I'm not sure we're handling places correctly, especially when the place isn't just a normal variable, this has to be analyzed and replaced with some handle_place down the line
-    // let target_variable = Expression::Variable { local: destination.local.as_usize() };
-
-    // return Statement::from_expression(Expression::Assignment { lhs: Box::new(target_variable), rhs: Box::new(call_expression) });
 }
 
-pub fn handle_terminator<'tcx>(
-    tcx: rustc_middle::ty::TyCtxt<'tcx>,
-    ongoing_codegen: &mut OngoingCodegen,
+pub fn handle_terminator<'tcx, 'ccx>(
+    fn_cx: &CodegenFunctionCx<'tcx, 'ccx>,
     terminator: &rustc_middle::mir::Terminator<'tcx>,
     bb_id: &BasicBlockIdentifier,
 ) -> Vec<Statement> {
-    let span = debug_span!("handle_terminator").entered();
+    let _span = debug_span!("handle_terminator").entered();
 
     match terminator.kind.clone() {
         TerminatorKind::Call {
@@ -154,7 +160,7 @@ pub fn handle_terminator<'tcx>(
             call_source: _,
             fn_span: _,
         } => {
-            let fn_call = handle_function_call(tcx, ongoing_codegen, func, args, destination);
+            let fn_call = handle_function_call(fn_cx, func, args, destination);
 
             if let Some(target) = target {
                 let stmt = Statement::from_expression(Expression::Goto {
@@ -177,7 +183,7 @@ pub fn handle_terminator<'tcx>(
 
         TerminatorKind::SwitchInt { discr, targets } => {
             let stmt = Statement::from_expression(Expression::SwitchJump {
-                value: Box::new(handle_operand(tcx, ongoing_codegen, &discr)),
+                value: Box::new(handle_operand(fn_cx, &discr)),
 
                 cases: targets
                     .iter()
@@ -223,7 +229,7 @@ pub fn handle_terminator<'tcx>(
                 I personally think the latter would be best and would allow us to side-step other similar issues.
                 We would have a default implementation that would use the assert macro, but the user could provide their own implementation.
             */
-            let mut assert_operand = handle_operand(tcx, ongoing_codegen, &cond);
+            let mut assert_operand = handle_operand(fn_cx, &cond);
             if !expected {
                 assert_operand =
                     Expression::UnaryOp { op: UnaryOpType::Not, val: Box::new(assert_operand) };
@@ -262,15 +268,13 @@ pub fn handle_terminator<'tcx>(
     }
 }
 
-pub fn handle_bbs<'tcx>(
-    tcx: rustc_middle::ty::TyCtxt<'tcx>,
-    ongoing_codegen: &mut OngoingCodegen,
-    mir: &rustc_middle::mir::Body<'tcx>,
-    c_fn: &mut CFunction,
+pub fn handle_bbs<'tcx, 'ccx>(
+    fn_cx: &CodegenFunctionCx<'tcx, 'ccx>,
+    c_fn: &mut CFunction
 ) {
-    let blocks = &mir.basic_blocks;
+    let blocks = &fn_cx.mir.basic_blocks;
 
-    let span = debug_span!("handle_bbs").entered();
+    let _span = debug_span!("handle_bbs").entered();
 
     for (bb_id, block_data) in blocks.into_iter().enumerate() {
         let block_data: &BasicBlockData = block_data;
@@ -286,11 +290,11 @@ pub fn handle_bbs<'tcx>(
         n_bb.push(Statement::from_comment(format!("Basic Block: {:?}", block_data)));
 
         for stmt in statements {
-            n_bb.push(handle_stmt(tcx, ongoing_codegen, stmt));
+            n_bb.push(handle_stmt(fn_cx, stmt));
         }
 
         let terminator_statmeents =
-            handle_terminator(tcx, ongoing_codegen, &block_data.terminator(), &n_bb.bb_id);
+            handle_terminator(fn_cx, &block_data.terminator(), &n_bb.bb_id);
 
         for stmt in terminator_statmeents {
             n_bb.push(stmt);
