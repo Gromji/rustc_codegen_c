@@ -2,9 +2,10 @@ use crate::bb::{self, BasicBlock};
 use crate::crepr::{indent, Expression, Representable, RepresentationContext};
 use crate::definition::CVarDef;
 use crate::stmt::Statement;
+use crate::structure::CStruct;
 use crate::ty::{CStructInfo, CType};
 use crate::{base::OngoingCodegen, definition::CVarDecl};
-use rustc_middle::ty::{Instance, Tuple};
+use rustc_middle::ty::{Instance, TyKind};
 use std::collections::HashSet;
 use std::fmt::{self, Debug};
 
@@ -117,7 +118,8 @@ fn print_mir<'tcx>(tcx: rustc_middle::ty::TyCtxt<'tcx>, mir: &rustc_middle::mir:
 }
 
 fn handle_decls<'tcx>(
-    _ongoing_codegen: &mut OngoingCodegen,
+    tcx: rustc_middle::ty::TyCtxt<'tcx>,
+    ongoing_codegen: &mut OngoingCodegen,
     mir: &rustc_middle::mir::Body<'tcx>,
     c_fn: &mut CFunction,
 ) {
@@ -152,17 +154,46 @@ fn handle_decls<'tcx>(
 
         let ty = decl.ty;
         let name = format!("var{}", idx);
-        let c_ty: CType;
+        let c_ty = match ty.kind() {
+            TyKind::Tuple(t) => {
+                let struct_name = ongoing_codegen.context.get_struct_name(t);
+                CType::Struct(CStructInfo::from(&struct_name))
+            }
+            TyKind::Adt(adt_def, generic_fields) => match adt_def.adt_kind() {
+                rustc_middle::ty::AdtKind::Struct => {
+                    let mut struct_name_suffix = String::new();
+                    // If generic_fields is not empty, append types to struct name
+                    for field in generic_fields.iter() {
+                        struct_name_suffix.push_str(&format!("_{}", field.as_type().unwrap()));
+                    }
+                    // CType::Struct(CStructInfo::from(adt.variants().iter().next().unwrap()));
+                    let struct_name = format!(
+                        "{}{struct_name_suffix}",
+                        tcx.def_path_str(adt_def.did()).split("::").last().unwrap()
+                    );
+                    if !ongoing_codegen.context.has_struct_with_name(&struct_name) {
+                        // Will panic if there is struct inside struct because CType::from(struct) is called.
+                        let field_types: Vec<CVarDef> = adt_def
+                            .all_fields()
+                            .map(|field| {
+                                CVarDef::new(
+                                    field.name.to_string(),
+                                    CType::from(&field.ty(tcx, generic_fields)),
+                                )
+                            })
+                            .collect();
 
-        match ty.kind() {
-            Tuple(t) => {
-                let struct_name = _ongoing_codegen.context.get_struct_name(t);
-                c_ty = CType::Struct(CStructInfo::from(&struct_name));
-            }
-            _ => {
-                c_ty = CType::from(&ty);
-            }
-        }
+                        ongoing_codegen
+                            .context
+                            .get_mut_structs()
+                            .push(CStruct::new(struct_name.clone(), Some(field_types)));
+                    }
+                    CType::Struct(CStructInfo::from(&struct_name))
+                }
+                _ => CType::from(&ty),
+            },
+            _ => CType::from(&ty),
+        };
         let c_var = CVarDef::new(name, c_ty);
         c_fn.add_var_decl(CVarDecl::new(c_var, None));
     }
@@ -181,7 +212,7 @@ pub fn handle_fn<'tcx>(
     print_mir(tcx, mir);
 
     // Handle local variables
-    handle_decls(ongoing_codegen, mir, &mut c_fn);
+    handle_decls(tcx, ongoing_codegen, mir, &mut c_fn);
 
     trace!("{:?}", c_fn);
 

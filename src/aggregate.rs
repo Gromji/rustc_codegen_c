@@ -5,6 +5,7 @@ use crate::stmt::handle_operand;
 use crate::ty::{CStructInfo, CType};
 use crate::{base::OngoingCodegen, crepr::indent};
 use rustc_middle::mir::{AggregateKind, Operand, Place, Rvalue, StatementKind};
+use rustc_middle::ty::{Instance, ParamEnv};
 use rustc_span::def_id::DefId;
 use tracing::{debug, debug_span, warn};
 pub fn handle_aggregate<'tcx, I>(
@@ -12,7 +13,7 @@ pub fn handle_aggregate<'tcx, I>(
     ongoing_codegen: &mut OngoingCodegen,
     c_fn: &CFunction,
     place: &Place<'tcx>,
-    kind: &AggregateKind,
+    kind: &AggregateKind<'tcx>,
     fields: I,
 ) -> Expression
 where
@@ -63,7 +64,6 @@ where
                     let expression = handle_operand(tcx, ongoing_codegen, &field);
                     field_expressions.push(expression);
                 }
-
                 let rhs = crepr::Expression::Struct {
                     name: struct_info.name.clone(),
                     fields: field_expressions,

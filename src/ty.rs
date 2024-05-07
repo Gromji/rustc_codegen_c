@@ -311,12 +311,6 @@ pub struct CStructInfo {
     pub name: String,
 }
 
-impl From<&VariantDef> for CStructInfo {
-    fn from(value: &VariantDef) -> Self {
-        // TODO: Change this. to_string uses unsafe!!!
-        CStructInfo { name: value.name.to_string() }
-    }
-}
 impl From<&String> for CStructInfo {
     fn from(value: &String) -> Self {
         CStructInfo { name: value.clone() }
@@ -342,13 +336,12 @@ impl<'tcx> From<&Ty<'tcx>> for CType {
             }
             rustc_middle::ty::Ref(_, ty, _) => CType::Pointer(Box::new(CType::from(ty))),
             rustc_middle::ty::Array(ty, size) => {
-                // TODO: Move value extraction to utils::try_usize or think of something better
                 CType::Array(Box::new(CType::from(ty)), utils::const_to_usize(size))
             }
             rustc_middle::ty::Slice(ty) => CType::from(ty),
             rustc_middle::ty::Adt(adt, _) => match adt.adt_kind() {
                 rustc_middle::ty::AdtKind::Struct => {
-                    CType::Struct(CStructInfo::from(adt.variants().iter().next().unwrap()))
+                    panic!("Should not use this!");
                 }
                 rustc_middle::ty::AdtKind::Union => CType::Union,
                 rustc_middle::ty::AdtKind::Enum => CType::Enum,
