@@ -10,6 +10,7 @@ fn main() {
 struct Te {
     a: i32,
     b: i32,
+    pair: Pair<i32, bool>,
 }
 struct Pair<T, U> {
     first: T,
@@ -18,7 +19,7 @@ struct Pair<T, U> {
 
 fn test() -> i32 {
     let t: Te;
-    t = Te { a: 7, b: 8 };
+    t = Te { a: 7, b: 8, pair: Pair { first: 128, second: true } };
     let p: Pair<i32, bool> = Pair { first: 128, second: true };
     let p2 = Pair { first: false, second: true };
     let k = 5;

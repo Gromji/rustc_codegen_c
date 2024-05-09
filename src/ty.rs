@@ -1,10 +1,10 @@
-use std::fmt::{self, Debug};
-
-use rustc_middle::ty::{FnSig, Ty, VariantDef};
-
 use crate::crepr::{Representable, RepresentationContext};
-
+use crate::definition::CVarDef;
+use crate::structure::CStruct;
 use crate::utils;
+use crate::OngoingCodegen;
+use rustc_middle::ty::{self, FnSig, Ty, VariantDef};
+use std::fmt::{self, Debug};
 
 #[derive(Clone, PartialEq, Eq)]
 #[allow(dead_code)]
@@ -310,14 +310,62 @@ impl<'tcx> From<FnSig<'tcx>> for CFuncPtrInfo {
 pub struct CStructInfo {
     pub name: String,
 }
+impl CStructInfo {
+    pub fn new(name: &String) -> Self {
+        Self { name: name.clone() }
+    }
+}
+/// Used to convert Rust types to C types. This function also handles [generic] struct creation.
+pub fn rust_to_c_type<'tcx>(
+    tcx: rustc_middle::ty::TyCtxt<'tcx>,
+    ongoing_codegen: &mut OngoingCodegen,
+    ty: &Ty<'tcx>,
+) -> CType {
+    match ty.kind() {
+        rustc_middle::ty::Tuple(t) => {
+            let struct_name = ongoing_codegen.context.get_struct_name(t);
+            CType::Struct(CStructInfo::new(&struct_name))
+        }
+        rustc_middle::ty::Adt(adt_def, generic_fields) => match adt_def.adt_kind() {
+            rustc_middle::ty::AdtKind::Struct => {
+                let mut struct_name_suffix = String::new();
+                // If generic_fields is not empty, append types to struct name
+                for field in generic_fields.iter() {
+                    struct_name_suffix.push_str(&format!("_{}", field.as_type().unwrap()));
+                }
+                let struct_name = format!(
+                    "{}{struct_name_suffix}",
+                    tcx.def_path_str(adt_def.did()).split("::").last().unwrap()
+                );
+                if !ongoing_codegen.context.has_struct_with_name(&struct_name) {
+                    let field_types: Vec<CVarDef> = adt_def
+                        .all_fields()
+                        .map(|field| {
+                            CVarDef::new(
+                                field.name.to_string(),
+                                rust_to_c_type(
+                                    tcx,
+                                    ongoing_codegen,
+                                    &field.ty(tcx, generic_fields),
+                                ),
+                            )
+                        })
+                        .collect();
 
-impl From<&String> for CStructInfo {
-    fn from(value: &String) -> Self {
-        CStructInfo { name: value.clone() }
+                    ongoing_codegen
+                        .context
+                        .get_mut_structs()
+                        .push(CStruct::new(struct_name.clone(), Some(field_types)));
+                }
+                CType::Struct(CStructInfo::new(&struct_name))
+            }
+            _ => CType::from(ty),
+        },
+        _ => CType::from(ty),
     }
 }
 
-// TODO: This is not yet done.
+// Do not use this directly, use rust_to_c_type instead.
 impl<'tcx> From<&Ty<'tcx>> for CType {
     fn from(ty: &Ty) -> Self {
         match ty.kind() {
@@ -339,6 +387,9 @@ impl<'tcx> From<&Ty<'tcx>> for CType {
                 CType::Array(Box::new(CType::from(ty)), utils::const_to_usize(size))
             }
             rustc_middle::ty::Slice(ty) => CType::from(ty),
+            rustc_middle::ty::Tuple(_) => {
+                panic!("Should not use this!");
+            }
             rustc_middle::ty::Adt(adt, _) => match adt.adt_kind() {
                 rustc_middle::ty::AdtKind::Struct => {
                     panic!("Should not use this!");

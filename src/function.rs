@@ -3,7 +3,7 @@ use crate::crepr::{indent, Expression, Representable, RepresentationContext};
 use crate::definition::CVarDef;
 use crate::stmt::Statement;
 use crate::structure::CStruct;
-use crate::ty::{CStructInfo, CType};
+use crate::ty::{rust_to_c_type, CStructInfo, CType};
 use crate::{base::OngoingCodegen, definition::CVarDecl};
 use rustc_middle::ty::{Instance, TyKind};
 use std::collections::HashSet;
@@ -141,7 +141,7 @@ fn handle_decls<'tcx>(
         // add index to set
         set.insert(arg.index());
 
-        let c_var = CVarDef::new(name, CType::from(&ty));
+        let c_var = CVarDef::new(name, rust_to_c_type(tcx, ongoing_codegen, &ty));
         c_fn.add_signature_var(c_var);
     });
 
@@ -154,46 +154,7 @@ fn handle_decls<'tcx>(
 
         let ty = decl.ty;
         let name = format!("var{}", idx);
-        let c_ty = match ty.kind() {
-            TyKind::Tuple(t) => {
-                let struct_name = ongoing_codegen.context.get_struct_name(t);
-                CType::Struct(CStructInfo::from(&struct_name))
-            }
-            TyKind::Adt(adt_def, generic_fields) => match adt_def.adt_kind() {
-                rustc_middle::ty::AdtKind::Struct => {
-                    let mut struct_name_suffix = String::new();
-                    // If generic_fields is not empty, append types to struct name
-                    for field in generic_fields.iter() {
-                        struct_name_suffix.push_str(&format!("_{}", field.as_type().unwrap()));
-                    }
-                    // CType::Struct(CStructInfo::from(adt.variants().iter().next().unwrap()));
-                    let struct_name = format!(
-                        "{}{struct_name_suffix}",
-                        tcx.def_path_str(adt_def.did()).split("::").last().unwrap()
-                    );
-                    if !ongoing_codegen.context.has_struct_with_name(&struct_name) {
-                        // Will panic if there is struct inside struct because CType::from(struct) is called.
-                        let field_types: Vec<CVarDef> = adt_def
-                            .all_fields()
-                            .map(|field| {
-                                CVarDef::new(
-                                    field.name.to_string(),
-                                    CType::from(&field.ty(tcx, generic_fields)),
-                                )
-                            })
-                            .collect();
-
-                        ongoing_codegen
-                            .context
-                            .get_mut_structs()
-                            .push(CStruct::new(struct_name.clone(), Some(field_types)));
-                    }
-                    CType::Struct(CStructInfo::from(&struct_name))
-                }
-                _ => CType::from(&ty),
-            },
-            _ => CType::from(&ty),
-        };
+        let c_ty = rust_to_c_type(tcx, ongoing_codegen, &ty);
         let c_var = CVarDef::new(name, c_ty);
         c_fn.add_var_decl(CVarDecl::new(c_var, None));
     }
@@ -206,7 +167,8 @@ pub fn handle_fn<'tcx>(
     inst: &Instance<'tcx>,
 ) {
     let mir = tcx.instance_mir(inst.def);
-    let mut c_fn = CFunction::new(inst.to_string(), CType::from(&mir.return_ty()));
+    let mut c_fn =
+        CFunction::new(inst.to_string(), rust_to_c_type(tcx, ongoing_codegen, &mir.return_ty()));
 
     // Pring mir of function for debugging
     print_mir(tcx, mir);
