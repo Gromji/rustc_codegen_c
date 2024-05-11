@@ -3,7 +3,7 @@ use crate::definition::CVarDef;
 use crate::structure::CStruct;
 use crate::utils;
 use crate::OngoingCodegen;
-use rustc_middle::ty::{self, FnSig, Ty, VariantDef};
+use rustc_middle::ty::{FnSig, Ty};
 use std::fmt::{self, Debug};
 
 #[derive(Clone, PartialEq, Eq)]

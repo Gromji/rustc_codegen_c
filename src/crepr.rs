@@ -1,4 +1,3 @@
-use crate::ty::CType;
 use std::fmt::{self, Debug};
 
 // TODO we could pass more information to this context, such as the current function, to allow for more context-aware representations

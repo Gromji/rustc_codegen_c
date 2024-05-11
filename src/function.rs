@@ -2,10 +2,9 @@ use crate::bb::{self, BasicBlock};
 use crate::crepr::{indent, Expression, Representable, RepresentationContext};
 use crate::definition::CVarDef;
 use crate::stmt::Statement;
-use crate::structure::CStruct;
-use crate::ty::{rust_to_c_type, CStructInfo, CType};
+use crate::ty::{rust_to_c_type, CType};
 use crate::{base::OngoingCodegen, definition::CVarDecl};
-use rustc_middle::ty::{Instance, TyKind};
+use rustc_middle::ty::Instance;
 use std::collections::HashSet;
 use std::fmt::{self, Debug};
 

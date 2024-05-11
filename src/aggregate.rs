@@ -1,13 +1,10 @@
+use crate::base::OngoingCodegen;
 use crate::crepr::{self, Expression};
-use crate::definition::{CVarDecl, CVarDef};
 use crate::function::CFunction;
 use crate::stmt::handle_operand;
-use crate::ty::{CStructInfo, CType};
-use crate::{base::OngoingCodegen, crepr::indent};
-use rustc_middle::mir::{AggregateKind, Operand, Place, Rvalue, StatementKind};
-use rustc_middle::ty::{Instance, ParamEnv};
-use rustc_span::def_id::DefId;
-use tracing::{debug, debug_span, warn};
+use crate::ty::CType;
+use rustc_middle::mir::{AggregateKind, Operand, Place};
+use tracing::{debug_span, warn};
 pub fn handle_aggregate<'tcx, I>(
     tcx: rustc_middle::ty::TyCtxt<'tcx>,
     ongoing_codegen: &mut OngoingCodegen,
@@ -43,8 +40,7 @@ where
                 unreachable!("Error: Type should have been a struct!");
             }
         },
-        AggregateKind::Array(ty) => {
-            let var_name = local_var.get_name();
+        AggregateKind::Array(_) => {
             let mut field_expressions = Vec::new();
             for (i, field) in fields.enumerate() {
                 let rh_expression = handle_operand(tcx, ongoing_codegen, &field);
@@ -57,10 +53,10 @@ where
 
             crepr::Expression::Array { fields: field_expressions }
         }
-        AggregateKind::Adt(def_id, variant_idx, args_ref, _a, _b) => match var_type {
+        AggregateKind::Adt(_, _, _, _, _) => match var_type {
             CType::Struct(struct_info) => {
                 let mut field_expressions = Vec::new();
-                for (i, field) in fields.enumerate() {
+                for field in fields {
                     let expression = handle_operand(tcx, ongoing_codegen, &field);
                     field_expressions.push(expression);
                 }
