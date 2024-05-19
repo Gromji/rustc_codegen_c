@@ -1,5 +1,7 @@
 use std::fmt::{self, Debug};
 
+use crate::bb::BasicBlockIdentifier;
+
 // TODO we could pass more information to this context, such as the current function, to allow for more context-aware representations
 #[derive(Debug, Clone, Default)]
 pub struct RepresentationContext {
@@ -141,8 +143,11 @@ pub enum Expression {
     BinaryOp { op: BinOpType, lhs: Box<Expression>, rhs: Box<Expression> },
     CheckedBinaryOp { op: BinOpType, lhs: Box<Expression>, rhs: Box<Expression> },
     UnaryOp { op: UnaryOpType, val: Box<Expression> },
+    Goto { target: BasicBlockIdentifier},
     Return { value: Box<Expression> },
+    SwitchJump { value: Box<Expression>, cases: Vec<(Box<Expression>, BasicBlockIdentifier)>, default: BasicBlockIdentifier},
     NoOp {},
+    FnCall { function: Box<Expression>, args: Vec<Expression> },
 }
 
 impl Representable for Expression {
@@ -213,6 +218,58 @@ impl Representable for Expression {
             Expression::Return { value } => {
                 write!(f, "return ")?;
                 value.repr(f, context)?;
+                Ok(())
+            }
+
+            Expression::Goto { target } => {
+                write!(f, "goto ")?;
+                target.repr(f, context)?;
+                Ok(())
+            }
+
+            Expression::SwitchJump { value, cases, default } => {
+                write!(f, "switch (")?;
+                value.repr(f, context)?;
+                write!(f, ")")?;
+                write!(f, " {{\n")?;
+
+                for (case, target) in cases {
+                    indent(f, context)?;
+                    write!(f, "case ")?;
+                    case.repr(f, context)?;
+                    write!(f, ": goto ")?;
+                    target.repr(f, context)?;
+                    write!(f, ";")?;
+                    if context.include_newline {
+                        write!(f, "\n")?;
+                    }
+                }
+
+                indent(f, context);
+                write!(f, "default: goto ")?;
+                default.repr(f, context)?;
+                write!(f, ";")?;
+
+                if context.include_newline {
+                    write!(f, "\n")?;
+                }
+
+                indent(f, context);
+                write!(f, "}}")?;
+                Ok(())
+            
+            }
+
+            Expression::FnCall { function, args } => {
+                function.repr(f, context)?;
+                write!(f, "(")?;
+                for (i, arg) in args.iter().enumerate() {
+                    arg.repr(f, context)?;
+                    if i < args.len() - 1 {
+                        write!(f, ", ")?;
+                    }
+                }
+                write!(f, ")")?;
                 Ok(())
             }
         }
