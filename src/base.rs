@@ -145,7 +145,7 @@ fn transpile_cgu<'tcx>(
         match item {
             MonoItem::Fn(inst) => {
                 with_no_trimmed_paths!({
-                    function::handle_fn(tcx, ongoing_codegen, inst);
+                    function::handle_fn(tcx, ongoing_codegen, inst.clone());
                 });
             }
             MonoItem::Static(def) => {
@@ -163,7 +163,7 @@ pub fn run<'tcx>(
     metadata: rustc_metadata::EncodedMetadata,
 ) -> Box<(String, OngoingCodegen, EncodedMetadata, CrateInfo)> {
     let cgus: Vec<_> = tcx.collect_and_partition_mono_items(()).1.iter().collect();
-    let mut ongoing_codegen = OngoingCodegen { context: Context::new() };
+    let mut ongoing_codegen = Box::new(OngoingCodegen { context: Context::new() });
 
     tracing_subscriber::FmtSubscriber::builder()
         .with_line_number(true)
@@ -173,7 +173,7 @@ pub fn run<'tcx>(
         .init();
 
     // Build the prefix code
-    prefix::build_prefix(&mut ongoing_codegen.context);
+    prefix::build_prefix(&mut ongoing_codegen.context); 
 
     for cgu in &cgus {
         transpile_cgu(tcx, cgu, &mut ongoing_codegen);
@@ -181,5 +181,5 @@ pub fn run<'tcx>(
 
     let name: String = cgus.iter().next().unwrap().name().to_string();
 
-    Box::new((name, ongoing_codegen, metadata, CrateInfo::new(tcx, "c".to_string())))
+    Box::new((name, *ongoing_codegen, metadata, CrateInfo::new(tcx, "c".to_string())))
 }

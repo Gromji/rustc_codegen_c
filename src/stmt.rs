@@ -1,12 +1,12 @@
 use crate::aggregate::handle_aggregate;
-use crate::crepr::{self, Expression, Representable, RepresentationContext};
-use crate::function::CFunction;
+use crate::crepr::{self, Expression, Representable, RepresentationContext, indent};
+use crate::function::{CFunction, CodegenFunctionCx};
 use crate::utils;
 use crate::{base::OngoingCodegen, crepr::indent};
-use rustc_middle::mir::{ConstOperand, ConstValue, Operand, Place, Rvalue, StatementKind};
-use rustc_middle::ty::Ty;
 use std::fmt::{self, Debug};
+use rustc_middle::mir::{ConstOperand, ConstValue, Operand, Place, Rvalue, StatementKind};
 use tracing::{debug, debug_span, warn};
+use rustc_middle::ty::{ParamEnv, Ty};
 
 #[derive(Clone, PartialEq, Eq)]
 pub struct Statement {
@@ -56,11 +56,9 @@ impl Debug for Statement {
     }
 }
 
-pub fn handle_stmt<'tcx>(
-    tcx: rustc_middle::ty::TyCtxt<'tcx>,
-    ongoing_codegen: &mut OngoingCodegen,
-    c_fn: &CFunction,
-    stmt: &'tcx rustc_middle::mir::Statement<'tcx>,
+pub fn handle_stmt<'tcx, 'ccx>(
+    fn_cx: &CodegenFunctionCx<'tcx, 'ccx>,
+    stmt: &rustc_middle::mir::Statement<'tcx>,
 ) -> Statement {
     let span = debug_span!("handle_stmt").entered();
 
@@ -68,7 +66,7 @@ pub fn handle_stmt<'tcx>(
     debug!("Kind: {:?}", stmt.kind);
 
     let expression = match &stmt.kind {
-        StatementKind::Assign(val) => handle_assign(tcx, ongoing_codegen, c_fn, &val.0, &val.1),
+        StatementKind::Assign(val) => handle_assign(fn_cx, &val.0, &val.1),
 
         _ => crepr::Expression::NoOp {},
     };
@@ -80,9 +78,8 @@ pub fn handle_stmt<'tcx>(
     return statement;
 }
 
-pub fn handle_operand<'tcx>(
-    tcx: rustc_middle::ty::TyCtxt<'tcx>,
-    ongoing_codegen: &mut OngoingCodegen,
+pub fn handle_operand<'tcx, 'ccx>(
+    fn_cx: &CodegenFunctionCx<'tcx, 'ccx>,
     operand: &Operand<'tcx>,
 ) -> crepr::Expression {
     match operand {
@@ -90,14 +87,12 @@ pub fn handle_operand<'tcx>(
         // move operations can be treated as a copy operation (I think)
         Operand::Move(place) => Expression::Variable { local: place.local.as_usize(), idx: None },
 
-        Operand::Constant(constant) => handle_constant(tcx, ongoing_codegen, constant),
+        Operand::Constant(constant) => handle_constant(fn_cx, constant),
     }
 }
 
-fn handle_assign<'tcx>(
-    tcx: rustc_middle::ty::TyCtxt<'tcx>,
-    ongoing_codegen: &mut OngoingCodegen,
-    c_fn: &CFunction,
+fn handle_assign<'tcx, 'ccx>(
+    fn_cx: &CodegenFunctionCx<'tcx, 'ccx>,
     place: &Place<'tcx>,
     rvalue: &'tcx Rvalue<'tcx>,
 ) -> crepr::Expression {
@@ -106,18 +101,18 @@ fn handle_assign<'tcx>(
     debug!("rvalue( {:?} )", rvalue);
 
     let expression = match rvalue {
-        Rvalue::Use(operand) => handle_operand(tcx, ongoing_codegen, operand),
+        Rvalue::Use(operand) => handle_operand(fn_cx, operand),
 
         Rvalue::BinaryOp(op, operands) => {
-            let lhs = handle_operand(tcx, ongoing_codegen, &operands.0);
-            let rhs = handle_operand(tcx, ongoing_codegen, &operands.1);
+            let lhs = handle_operand(fn_cx, &operands.0);
+            let rhs = handle_operand(fn_cx, &operands.1);
 
             crepr::Expression::BinaryOp { op: op.into(), lhs: Box::new(lhs), rhs: Box::new(rhs) }
         }
 
         Rvalue::CheckedBinaryOp(op, operands) => {
-            let lhs = handle_operand(tcx, ongoing_codegen, &operands.0);
-            let rhs = handle_operand(tcx, ongoing_codegen, &operands.1);
+            let lhs = handle_operand(fn_cx, &operands.0);
+            let rhs = handle_operand(fn_cx, &operands.1);
 
             crepr::Expression::CheckedBinaryOp {
                 op: op.into(),
@@ -144,28 +139,19 @@ fn handle_assign<'tcx>(
     };
 }
 
-fn handle_constant<'tcx>(
-    tcx: rustc_middle::ty::TyCtxt<'tcx>,
-    _ongoing_codegen: &mut OngoingCodegen,
-    constant: &ConstOperand<'tcx>,
+pub fn handle_constant<'tcx, 'ccx>(
+    fn_cx: &CodegenFunctionCx<'tcx, 'ccx>,
+    const_op: &ConstOperand<'tcx>,
 ) -> Expression {
-    match constant.const_ {
-        rustc_middle::mir::Const::Unevaluated(c, t) => match tcx.const_eval_poly(c.def) {
-            Ok(val) => handle_const_value(&val, &t),
+    let constant = &const_op.const_;
+    
+    fn_cx.monomorphize(constant.ty());
+    let value = constant.eval(fn_cx.tcx, ParamEnv::reveal_all(), const_op.span).expect("Constant evaluation failed");
 
-            Err(e) => {
-                unreachable!("Error: {:?}", e);
-            }
-        },
-        rustc_middle::mir::Const::Val(val, ty) => handle_const_value(&val, &ty),
-        _ => {
-            warn!("Unhandled constant: {:?}", constant);
-            return Expression::NoOp {};
-        }
-    }
+    handle_const_value(&value, &constant.ty())
 }
 
-fn handle_const_value<'tcx>(val: &ConstValue, _ty: &Ty) -> Expression {
+fn handle_const_value<'tcx>(val: &ConstValue, ty: &Ty) -> Expression {
     match val {
         rustc_middle::mir::ConstValue::Scalar(scalar) => match scalar {
             rustc_const_eval::interpret::Scalar::Int(i) => {
@@ -177,6 +163,10 @@ fn handle_const_value<'tcx>(val: &ConstValue, _ty: &Ty) -> Expression {
             rustc_const_eval::interpret::Scalar::Ptr(_, _) => todo!("Ptr"),
         },
 
+        rustc_middle::mir::ConstValue::ZeroSized => {
+            debug!("Zerosized kind {:?}, val {:?}", ty.kind(), ty);
+            return Expression::Constant { value: ty.to_string() };
+        }
         _ => {
             warn!("Unhandled constant: {:?}", val);
             return Expression::NoOp {};

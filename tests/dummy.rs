@@ -5,6 +5,15 @@ fn main() {
     let _a = 1;
 
     let a = test();
+
+    let a = add_many(a);
+    
+    if a > 0 {
+        let b = 2;
+    } else {
+        let c = 3;
+    }
+
     let b = _a;
 }
 struct Te {
@@ -29,4 +38,15 @@ fn test() -> i32 {
     let o = 0..1;
 
     return 5;
+}
+
+
+fn add_many(x: i32) -> i32 {
+    let mut b = x;
+    
+    while b < b*b {
+        b += 3;
+    }
+
+    return x;
 }

@@ -1,10 +1,10 @@
 use crate::bb::{self, BasicBlock};
-use crate::crepr::{indent, Expression, Representable, RepresentationContext};
+use crate::crepr::{indent, Representable, RepresentationContext};
 use crate::definition::CVarDef;
+use crate::ty::{rust_to_c_type, CStructInfo, CType};
 use crate::stmt::Statement;
-use crate::ty::{rust_to_c_type, CType};
 use crate::{base::OngoingCodegen, definition::CVarDecl};
-use rustc_middle::ty::Instance;
+use rustc_middle::ty::{self, Instance, SymbolName, Tuple, TyCtxt, TypeFoldable};
 use std::collections::HashSet;
 use std::fmt::{self, Debug};
 
@@ -17,6 +17,26 @@ pub struct CFunction {
     local_decl: Vec<CVarDecl>,
     basic_blocks: Vec<BasicBlock>,
     return_ty: CType,
+}
+
+pub struct CodegenFunctionCx<'tcx, 'ccx> {
+    pub tcx: rustc_middle::ty::TyCtxt<'tcx>,
+    pub mir: &'tcx rustc_middle::mir::Body<'tcx>,
+    pub ongoing_codegen: &'ccx mut OngoingCodegen,
+    pub instance: Instance<'tcx>,
+}
+
+impl<'tcx> CodegenFunctionCx<'tcx, '_> {
+    pub fn monomorphize<T>(&self, value: T) -> T
+    where
+        T: Copy + TypeFoldable<TyCtxt<'tcx>>,
+    {
+        self.instance.instantiate_mir_and_normalize_erasing_regions(
+            self.tcx,
+            ty::ParamEnv::reveal_all(),
+            ty::EarlyBinder::bind(value),
+        )
+    }
 }
 
 impl Representable for CFunction {
@@ -39,14 +59,9 @@ impl Representable for CFunction {
         }
 
         for (i, bb) in self.basic_blocks.iter().enumerate() {
-            indent(f, context)?;
-            write!(f, "bb{}: {{\n", i)?;
-
-            bb.indented_repr(f, context)?;
-
-            indent(f, context)?;
-            write!(f, "}}\n")?;
+            bb.repr(f, context)?;
         }
+        
         write!(f, "}}")
     }
 }
@@ -159,39 +174,46 @@ fn handle_decls<'tcx>(
     }
 }
 
+/*TODO(Luka) this sort of function name extraction is not ideal, but might be necessary to avoid collisions, needs more thought, should also look at other codegens*/ 
+pub fn format_fn_name(name: &SymbolName) -> String {
+    let mut name = name.to_string();
+    name = name.replace('.', "_").replace('$', "_");
+    name
+}
+
 #[allow(unused_variables)]
 pub fn handle_fn<'tcx>(
     tcx: rustc_middle::ty::TyCtxt<'tcx>,
     ongoing_codegen: &mut OngoingCodegen,
-    inst: &Instance<'tcx>,
+    inst: Instance<'tcx>,
 ) {
+    
     let mir = tcx.instance_mir(inst.def);
-    let mut c_fn =
-        CFunction::new(inst.to_string(), rust_to_c_type(tcx, ongoing_codegen, &mir.return_ty()));
+    let fn_cx = CodegenFunctionCx {
+        tcx: tcx,
+        ongoing_codegen: ongoing_codegen,
+        instance: inst,
+        mir
+    };
+
+    let mut c_fn = CFunction::new(format_fn_name(&tcx.symbol_name(inst)), CType::from(&mir.return_ty()));
 
     // Pring mir of function for debugging
     print_mir(tcx, mir);
 
     // Handle local variables
-    handle_decls(tcx, ongoing_codegen, mir, &mut c_fn);
+    handle_decls(fn_cx.ongoing_codegen, mir, &mut c_fn);
 
     trace!("{:?}", c_fn);
 
     // Handle basic blocks
-    bb::handle_bbs(tcx, ongoing_codegen, mir, &mut c_fn);
+    bb::handle_bbs(&fn_cx, &mut c_fn);
 
-    let mut bb = BasicBlock::new();
-    bb.push(Statement::from_expression(Expression::Return {
-        value: Box::new(Expression::Variable { local: 0, idx: None }),
-    }));
-
-    // equivalent to return var0, since we are not handling return values yet
-    c_fn.push_bb(bb);
 
     // If is main prefix with "_"
     if c_fn.is_main() {
         c_fn.name = format!("_{}", c_fn.name);
     }
 
-    ongoing_codegen.context.get_mut_functions().push(c_fn);
+    fn_cx.ongoing_codegen.context.get_mut_functions().push(c_fn);
 }
