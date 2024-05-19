@@ -1,12 +1,11 @@
 use crate::aggregate::handle_aggregate;
-use crate::crepr::{self, Expression, Representable, RepresentationContext, indent};
+use crate::crepr::{self, indent, Expression, Representable, RepresentationContext};
 use crate::function::{CFunction, CodegenFunctionCx};
 use crate::utils;
-use crate::{base::OngoingCodegen, crepr::indent};
-use std::fmt::{self, Debug};
 use rustc_middle::mir::{ConstOperand, ConstValue, Operand, Place, Rvalue, StatementKind};
-use tracing::{debug, debug_span, warn};
 use rustc_middle::ty::{ParamEnv, Ty};
+use std::fmt::{self, Debug};
+use tracing::{debug, debug_span, warn};
 
 #[derive(Clone, PartialEq, Eq)]
 pub struct Statement {
@@ -58,7 +57,8 @@ impl Debug for Statement {
 
 pub fn handle_stmt<'tcx, 'ccx>(
     fn_cx: &CodegenFunctionCx<'tcx, 'ccx>,
-    stmt: &rustc_middle::mir::Statement<'tcx>,
+    c_fn: &CFunction,
+    stmt: &'tcx rustc_middle::mir::Statement<'tcx>,
 ) -> Statement {
     let span = debug_span!("handle_stmt").entered();
 
@@ -66,7 +66,7 @@ pub fn handle_stmt<'tcx, 'ccx>(
     debug!("Kind: {:?}", stmt.kind);
 
     let expression = match &stmt.kind {
-        StatementKind::Assign(val) => handle_assign(fn_cx, &val.0, &val.1),
+        StatementKind::Assign(val) => handle_assign(fn_cx, c_fn, &val.0, &val.1),
 
         _ => crepr::Expression::NoOp {},
     };
@@ -93,6 +93,7 @@ pub fn handle_operand<'tcx, 'ccx>(
 
 fn handle_assign<'tcx, 'ccx>(
     fn_cx: &CodegenFunctionCx<'tcx, 'ccx>,
+    c_fn: &CFunction,
     place: &Place<'tcx>,
     rvalue: &'tcx Rvalue<'tcx>,
 ) -> crepr::Expression {
@@ -122,7 +123,7 @@ fn handle_assign<'tcx, 'ccx>(
         }
         Rvalue::Aggregate(kind, fields) => {
             // Return instantly because it already handles assignments.
-            return handle_aggregate(tcx, ongoing_codegen, c_fn, place, kind, fields.iter());
+            return handle_aggregate(fn_cx, c_fn, place, kind, fields.iter());
         }
 
         _ => {
@@ -144,9 +145,11 @@ pub fn handle_constant<'tcx, 'ccx>(
     const_op: &ConstOperand<'tcx>,
 ) -> Expression {
     let constant = &const_op.const_;
-    
+
     fn_cx.monomorphize(constant.ty());
-    let value = constant.eval(fn_cx.tcx, ParamEnv::reveal_all(), const_op.span).expect("Constant evaluation failed");
+    let value = constant
+        .eval(fn_cx.tcx, ParamEnv::reveal_all(), const_op.span)
+        .expect("Constant evaluation failed");
 
     handle_const_value(&value, &constant.ty())
 }

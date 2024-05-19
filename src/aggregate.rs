@@ -1,13 +1,11 @@
-use crate::base::OngoingCodegen;
 use crate::crepr::{self, Expression};
-use crate::function::CFunction;
+use crate::function::{CFunction, CodegenFunctionCx};
 use crate::stmt::handle_operand;
 use crate::ty::CType;
 use rustc_middle::mir::{AggregateKind, Operand, Place};
 use tracing::{debug_span, warn};
-pub fn handle_aggregate<'tcx, I>(
-    tcx: rustc_middle::ty::TyCtxt<'tcx>,
-    ongoing_codegen: &mut OngoingCodegen,
+pub fn handle_aggregate<'tcx, 'ccx, I>(
+    fn_cx: &CodegenFunctionCx<'tcx, 'ccx>,
     c_fn: &CFunction,
     place: &Place<'tcx>,
     kind: &AggregateKind<'tcx>,
@@ -25,7 +23,7 @@ where
             CType::Struct(struct_info) => {
                 let mut field_expressions = Vec::new();
                 for field in fields {
-                    let expression = handle_operand(tcx, ongoing_codegen, &field);
+                    let expression = handle_operand(fn_cx, &field);
                     field_expressions.push(expression);
                 }
 
@@ -43,7 +41,7 @@ where
         AggregateKind::Array(_) => {
             let mut field_expressions = Vec::new();
             for (i, field) in fields.enumerate() {
-                let rh_expression = handle_operand(tcx, ongoing_codegen, &field);
+                let rh_expression = handle_operand(fn_cx, &field);
                 let lh_expression = crepr::Expression::Variable { local: var_idx, idx: Some(i) };
                 field_expressions.push(crepr::Expression::Assignment {
                     lhs: Box::new(lh_expression),
@@ -57,7 +55,7 @@ where
             CType::Struct(struct_info) => {
                 let mut field_expressions = Vec::new();
                 for field in fields {
-                    let expression = handle_operand(tcx, ongoing_codegen, &field);
+                    let expression = handle_operand(fn_cx, &field);
                     field_expressions.push(expression);
                 }
                 let rhs = crepr::Expression::Struct {

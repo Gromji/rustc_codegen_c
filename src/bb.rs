@@ -7,7 +7,7 @@ use rustc_middle::mir::BasicBlockData;
 use rustc_middle::mir::Operand;
 use rustc_middle::mir::TerminatorKind;
 use rustc_span::source_map::Spanned;
-use tracing::{debug, debug_span, warn, error};
+use tracing::{debug, debug_span, error, warn};
 
 #[derive(Clone, PartialEq, Eq)]
 pub struct BasicBlockIdentifier(pub usize);
@@ -93,31 +93,38 @@ fn handle_function_call<'tcx, 'ccx>(
     args: Vec<Spanned<Operand<'tcx>>>,
     destination: rustc_middle::mir::Place<'tcx>,
 ) -> Statement {
-    let destination = Expression::Variable { local: destination.local.as_usize() }; // TODO this is probably wrong, we should handle places properly    
+    let destination = Expression::Variable { local: destination.local.as_usize(), idx: None }; // TODO this is probably wrong, we should handle places properly    
 
     match func {
         Operand::Constant(ref constant) => {
-
             let ty = fn_cx.monomorphize(constant.ty());
 
             let const_expr = match ty.kind() {
                 rustc_middle::ty::TyKind::FnDef(def_id, substs) => {
-                    let instance = rustc_middle::ty::Instance::resolve(fn_cx.tcx, rustc_middle::ty::ParamEnv::reveal_all(), *def_id, substs).unwrap();
+                    let instance = rustc_middle::ty::Instance::resolve(
+                        fn_cx.tcx,
+                        rustc_middle::ty::ParamEnv::reveal_all(),
+                        *def_id,
+                        substs,
+                    )
+                    .unwrap();
                     if let Some(instance) = instance {
-                        
-                        Expression::Constant { value: format_fn_name(&fn_cx.tcx.symbol_name(instance))}
-                    
+                        Expression::Constant {
+                            value: format_fn_name(&fn_cx.tcx.symbol_name(instance)),
+                        }
                     } else {
                         error!("Instance not found for {:?}", constant);
-                        
-                        Expression::Constant { value: format!("Instance not found for {:?}", constant) }
+
+                        Expression::Constant {
+                            value: format!("Instance not found for {:?}", constant),
+                        }
                     }
                 }
 
                 _ => {
                     warn!("Unimplemented function call: {:?}", func);
 
-                    Expression::Constant { value: format!("Unimplemented func call {:?}", func)}
+                    Expression::Constant { value: format!("Unimplemented func call {:?}", func) }
                 }
             };
 
@@ -175,7 +182,7 @@ pub fn handle_terminator<'tcx, 'ccx>(
 
         TerminatorKind::Return => {
             let stmt = Statement::from_expression(Expression::Return {
-                value: Box::new(Expression::Variable { local: 0 }), // hardcoded 0 value, since return values are always index 0
+                value: Box::new(Expression::Variable { local: 0, idx: None }), // hardcoded 0 value, since return values are always index 0
             });
 
             return vec![stmt];
@@ -236,7 +243,7 @@ pub fn handle_terminator<'tcx, 'ccx>(
             }
 
             let assert_stmt = Statement::from_expression(Expression::FnCall {
-                function: Box::new(Expression::Constant { value: "assert".to_string()}),
+                function: Box::new(Expression::Constant { value: "assert".to_string() }),
                 args: vec![assert_operand],
             });
 
@@ -268,10 +275,7 @@ pub fn handle_terminator<'tcx, 'ccx>(
     }
 }
 
-pub fn handle_bbs<'tcx, 'ccx>(
-    fn_cx: &CodegenFunctionCx<'tcx, 'ccx>,
-    c_fn: &mut CFunction
-) {
+pub fn handle_bbs<'tcx, 'ccx>(fn_cx: &CodegenFunctionCx<'tcx, 'ccx>, c_fn: &mut CFunction) {
     let blocks = &fn_cx.mir.basic_blocks;
 
     let _span = debug_span!("handle_bbs").entered();
@@ -290,11 +294,10 @@ pub fn handle_bbs<'tcx, 'ccx>(
         n_bb.push(Statement::from_comment(format!("Basic Block: {:?}", block_data)));
 
         for stmt in statements {
-            n_bb.push(handle_stmt(fn_cx, stmt));
+            n_bb.push(handle_stmt(fn_cx, c_fn, stmt));
         }
 
-        let terminator_statmeents =
-            handle_terminator(fn_cx, &block_data.terminator(), &n_bb.bb_id);
+        let terminator_statmeents = handle_terminator(fn_cx, &block_data.terminator(), &n_bb.bb_id);
 
         for stmt in terminator_statmeents {
             n_bb.push(stmt);
