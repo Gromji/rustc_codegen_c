@@ -33,6 +33,9 @@ mod ty;
 mod utils;
 mod write;
 
+// Maybe later change the way we name and include the header file.
+const HEADER_FILE_NAME: &str = "header_file.h";
+
 pub struct CCodegenBackend(());
 
 impl CodegenBackend for CCodegenBackend {
@@ -91,10 +94,13 @@ impl CodegenBackend for CCodegenBackend {
         match output_name {
             OutFileName::Real(ref path) => {
                 let tmp_path = codegen_results.modules[0].object.as_ref().unwrap();
+                let tmp_header_path = codegen_results.modules[1].object.as_ref().unwrap();
 
                 // rename to out_file
                 let tmp_path = Path::new(tmp_path);
+                let tmp_header_path = Path::new(tmp_header_path);
                 std::fs::rename(tmp_path, path.with_extension("c")).unwrap();
+                std::fs::rename(tmp_header_path, path.with_file_name(HEADER_FILE_NAME)).unwrap();
             }
             OutFileName::Stdout => {
                 let mut stdout = std::io::stdout();

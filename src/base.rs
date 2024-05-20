@@ -31,13 +31,19 @@ use crate::write;
 
 pub struct Context {
     includes: Vec<include::Include>,
+    header_includes: Vec<include::Include>,
     functions: Vec<function::CFunction>,
     structs: Vec<structure::CStruct>,
 }
 
 impl Context {
     pub fn new() -> Self {
-        Self { includes: Vec::new(), functions: Vec::new(), structs: Vec::new() }
+        Self {
+            includes: Vec::new(),
+            header_includes: Vec::new(),
+            functions: Vec::new(),
+            structs: Vec::new(),
+        }
     }
 
     pub fn get_includes(&self) -> &Vec<include::Include> {
@@ -46,6 +52,13 @@ impl Context {
 
     pub fn get_mut_includes(&mut self) -> &mut Vec<include::Include> {
         &mut self.includes
+    }
+    pub fn get_header_includes(&self) -> &Vec<include::Include> {
+        &self.header_includes
+    }
+
+    pub fn get_mut_header_includes(&mut self) -> &mut Vec<include::Include> {
+        &mut self.header_includes
     }
 
     pub fn get_functions(&self) -> &Vec<function::CFunction> {
@@ -101,26 +114,45 @@ impl OngoingCodegen {
         output_files: &OutputFilenames,
     ) -> CodegenResults {
         let path = output_files.temp_path(OutputType::Object, Some(name.as_str()));
+        let header_name = format!("{}_h", name);
+        let header_path = output_files.temp_path(OutputType::Object, Some(header_name.as_str()));
 
         let mut file = std::fs::File::create(&path).unwrap();
+        let mut header_file = std::fs::File::create(&header_path).unwrap();
 
-        write::write_includes(ongoing_codegen.context.get_includes(), &mut file);
+        write::write_includes(
+            ongoing_codegen.context.get_includes(),
+            ongoing_codegen.context.get_header_includes(),
+            &mut file,
+            &mut header_file,
+        );
 
-        write::write_prototypes(ongoing_codegen.context.get_functions(), &mut file);
+        write::write_prototypes(ongoing_codegen.context.get_functions(), &mut header_file);
 
-        write::write_structs(ongoing_codegen.context.get_structs(), &mut file);
+        write::write_structs(ongoing_codegen.context.get_structs(), &mut header_file);
 
         write::write_functions(ongoing_codegen.context.get_functions(), &mut file);
 
-        let modules = vec![CompiledModule {
-            name: name,
-            kind: rustc_codegen_ssa::ModuleKind::Regular,
-            object: Some(path),
-            bytecode: None,
-            dwarf_object: None,
-            assembly: None,
-            llvm_ir: None,
-        }];
+        let modules = vec![
+            CompiledModule {
+                name: name,
+                kind: rustc_codegen_ssa::ModuleKind::Regular,
+                object: Some(path),
+                bytecode: None,
+                dwarf_object: None,
+                assembly: None,
+                llvm_ir: None,
+            },
+            CompiledModule {
+                name: format!("{}_h", header_name),
+                kind: rustc_codegen_ssa::ModuleKind::Metadata,
+                object: Some(header_path),
+                bytecode: None,
+                dwarf_object: None,
+                assembly: None,
+                llvm_ir: None,
+            },
+        ];
 
         CodegenResults {
             crate_info: crate_info,
@@ -173,7 +205,7 @@ pub fn run<'tcx>(
         .init();
 
     // Build the prefix code
-    prefix::build_prefix(&mut ongoing_codegen.context); 
+    prefix::build_prefix(&mut ongoing_codegen.context);
 
     for cgu in &cgus {
         transpile_cgu(tcx, cgu, &mut ongoing_codegen);
