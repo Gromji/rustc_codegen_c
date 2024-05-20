@@ -1,9 +1,9 @@
 use crate::bb::{self, BasicBlock};
 use crate::crepr::{indent, Representable, RepresentationContext};
 use crate::definition::CVarDef;
-use crate::ty::{CStructInfo, CType};
+use crate::ty::{rust_to_c_type, CType};
 use crate::{base::OngoingCodegen, definition::CVarDecl};
-use rustc_middle::ty::{self, Instance, SymbolName, Tuple, TyCtxt, TypeFoldable};
+use rustc_middle::ty::{self, Instance, SymbolName, TyCtxt, TypeFoldable};
 use std::collections::HashSet;
 use std::fmt::{self, Debug};
 
@@ -60,7 +60,7 @@ impl Representable for CFunction {
         for (i, bb) in self.basic_blocks.iter().enumerate() {
             bb.repr(f, context)?;
         }
-        
+
         write!(f, "}}")
     }
 }
@@ -110,6 +110,13 @@ impl CFunction {
         self.local_decl.push(var);
     }
 
+    pub fn get_local_var(&self, idx: usize) -> &CVarDecl {
+        &self.local_decl[idx]
+    }
+    pub fn get_local_var_name(&self, idx: usize) -> String {
+        self.local_decl[idx].get_name()
+    }
+
     #[allow(dead_code)]
     pub fn validate_fn(&self) -> bool {
         todo!("TODO: Would be a good idea to have some kind of validation")
@@ -123,8 +130,9 @@ fn print_mir<'tcx>(tcx: rustc_middle::ty::TyCtxt<'tcx>, mir: &rustc_middle::mir:
     debug!("{}", &String::from_utf8_lossy(&buf).into_owned());
 }
 
-fn handle_decls<'tcx, 'ccx>(
-    _ongoing_codegen: &mut OngoingCodegen,
+fn handle_decls<'tcx>(
+    tcx: rustc_middle::ty::TyCtxt<'tcx>,
+    ongoing_codegen: &mut OngoingCodegen,
     mir: &rustc_middle::mir::Body<'tcx>,
     c_fn: &mut CFunction,
 ) {
@@ -146,7 +154,7 @@ fn handle_decls<'tcx, 'ccx>(
         // add index to set
         set.insert(arg.index());
 
-        let c_var = CVarDef::new(name, CType::from(&ty));
+        let c_var = CVarDef::new(name, rust_to_c_type(tcx, ongoing_codegen, &ty));
         c_fn.add_signature_var(c_var);
     });
 
@@ -159,23 +167,13 @@ fn handle_decls<'tcx, 'ccx>(
 
         let ty = decl.ty;
         let name = format!("var{}", idx);
-        let c_ty: CType;
-
-        match ty.kind() {
-            Tuple(t) => {
-                let struct_name = _ongoing_codegen.context.get_struct_name(t);
-                c_ty = CType::Struct(CStructInfo::from(&struct_name));
-            }
-            _ => {
-                c_ty = CType::from(&ty);
-            }
-        }
+        let c_ty = rust_to_c_type(tcx, ongoing_codegen, &ty);
         let c_var = CVarDef::new(name, c_ty);
         c_fn.add_var_decl(CVarDecl::new(c_var, None));
     }
 }
 
-/*TODO(Luka) this sort of function name extraction is not ideal, but might be necessary to avoid collisions, needs more thought, should also look at other codegens*/ 
+/*TODO(Luka) this sort of function name extraction is not ideal, but might be necessary to avoid collisions, needs more thought, should also look at other codegens*/
 pub fn format_fn_name(name: &SymbolName) -> String {
     let mut name = name.to_string();
     name = name.replace('.', "_").replace('$', "_");
@@ -188,29 +186,25 @@ pub fn handle_fn<'tcx>(
     ongoing_codegen: &mut OngoingCodegen,
     inst: Instance<'tcx>,
 ) {
-    
     let mir = tcx.instance_mir(inst.def);
+    let fn_cx =
+        CodegenFunctionCx { tcx: tcx, ongoing_codegen: ongoing_codegen, instance: inst, mir };
 
-    let fn_cx = CodegenFunctionCx {
-        tcx: tcx,
-        ongoing_codegen: ongoing_codegen,
-        instance: inst,
-        mir
-    };
-
-    let mut c_fn = CFunction::new(format_fn_name(&tcx.symbol_name(inst)), CType::from(&mir.return_ty()));
+    let mut c_fn = CFunction::new(
+        format_fn_name(&tcx.symbol_name(inst)),
+        rust_to_c_type(fn_cx.tcx, fn_cx.ongoing_codegen, &mir.return_ty()),
+    );
 
     // Pring mir of function for debugging
     print_mir(tcx, mir);
 
     // Handle local variables
-    handle_decls(fn_cx.ongoing_codegen, mir, &mut c_fn);
+    handle_decls(tcx, fn_cx.ongoing_codegen, mir, &mut c_fn);
 
     trace!("{:?}", c_fn);
 
     // Handle basic blocks
     bb::handle_bbs(&fn_cx, &mut c_fn);
-
 
     // If is main prefix with "_"
     if c_fn.is_main() {

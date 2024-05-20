@@ -1,4 +1,4 @@
-use rustc_middle::mir::interpret::{Pointer, Scalar};
+use rustc_middle::mir::interpret::Scalar;
 use rustc_middle::ty::Const;
 pub fn const_to_usize(value: &Const) -> usize {
     const_to_u128(value).try_into().unwrap()

@@ -1,12 +1,11 @@
-use crate::function::CodegenFunctionCx;
-use crate::crepr::indent;
-use std::fmt::{self, Debug};
-use tracing::{debug, debug_span, warn};
-use crate::crepr::{self, Expression, Representable, RepresentationContext};
+use crate::aggregate::handle_aggregate;
+use crate::crepr::{self, indent, Expression, Representable, RepresentationContext};
+use crate::function::{CFunction, CodegenFunctionCx};
 use crate::utils;
 use rustc_middle::mir::{ConstOperand, ConstValue, Operand, Place, Rvalue, StatementKind};
 use rustc_middle::ty::{ParamEnv, Ty};
-
+use std::fmt::{self, Debug};
+use tracing::{debug, debug_span, warn};
 
 #[derive(Clone, PartialEq, Eq)]
 pub struct Statement {
@@ -58,7 +57,8 @@ impl Debug for Statement {
 
 pub fn handle_stmt<'tcx, 'ccx>(
     fn_cx: &CodegenFunctionCx<'tcx, 'ccx>,
-    stmt: &rustc_middle::mir::Statement<'tcx>,
+    c_fn: &CFunction,
+    stmt: &'tcx rustc_middle::mir::Statement<'tcx>,
 ) -> Statement {
     let span = debug_span!("handle_stmt").entered();
 
@@ -66,13 +66,13 @@ pub fn handle_stmt<'tcx, 'ccx>(
     debug!("Kind: {:?}", stmt.kind);
 
     let expression = match &stmt.kind {
-        StatementKind::Assign(val) => handle_assign(fn_cx, &val.0, &val.1),
+        StatementKind::Assign(val) => handle_assign(fn_cx, c_fn, &val.0, &val.1),
 
         _ => crepr::Expression::NoOp {},
     };
 
     let statement = Statement::new(expression, format!("//{:?}", stmt).into());
-  
+
     span.exit();
 
     return statement;
@@ -83,9 +83,9 @@ pub fn handle_operand<'tcx, 'ccx>(
     operand: &Operand<'tcx>,
 ) -> crepr::Expression {
     match operand {
-        Operand::Copy(place) => Expression::Variable { local: place.local.as_usize() },
+        Operand::Copy(place) => Expression::Variable { local: place.local.as_usize(), idx: None },
         // move operations can be treated as a copy operation (I think)
-        Operand::Move(place) => Expression::Variable { local: place.local.as_usize() },
+        Operand::Move(place) => Expression::Variable { local: place.local.as_usize(), idx: None },
 
         Operand::Constant(constant) => handle_constant(fn_cx, constant),
     }
@@ -93,8 +93,9 @@ pub fn handle_operand<'tcx, 'ccx>(
 
 fn handle_assign<'tcx, 'ccx>(
     fn_cx: &CodegenFunctionCx<'tcx, 'ccx>,
+    c_fn: &CFunction,
     place: &Place<'tcx>,
-    rvalue: &Rvalue<'tcx>,
+    rvalue: &'tcx Rvalue<'tcx>,
 ) -> crepr::Expression {
     let span = debug_span!("handle_assign").entered();
     debug!("place( {:?} )", place);
@@ -120,6 +121,10 @@ fn handle_assign<'tcx, 'ccx>(
                 rhs: Box::new(rhs),
             }
         }
+        Rvalue::Aggregate(kind, fields) => {
+            // Return instantly because it already handles assignments.
+            return handle_aggregate(fn_cx, c_fn, place, kind, fields.iter());
+        }
 
         _ => {
             warn!("Unhandled rvalue: {:?}", rvalue);
@@ -130,7 +135,7 @@ fn handle_assign<'tcx, 'ccx>(
     span.exit();
 
     return crepr::Expression::Assignment {
-        lhs: Box::new(crepr::Expression::Variable { local: place.local.as_usize() }),
+        lhs: Box::new(crepr::Expression::Variable { local: place.local.as_usize(), idx: None }),
         rhs: Box::new(expression),
     };
 }
@@ -140,9 +145,11 @@ pub fn handle_constant<'tcx, 'ccx>(
     const_op: &ConstOperand<'tcx>,
 ) -> Expression {
     let constant = &const_op.const_;
-    
+
     fn_cx.monomorphize(constant.ty());
-    let value = constant.eval(fn_cx.tcx, ParamEnv::reveal_all(), const_op.span).expect("Constant evaluation failed");
+    let value = constant
+        .eval(fn_cx.tcx, ParamEnv::reveal_all(), const_op.span)
+        .expect("Constant evaluation failed");
 
     handle_const_value(&value, &constant.ty())
 }

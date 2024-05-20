@@ -76,6 +76,15 @@ impl Context {
         self.get_mut_structs().push(cur_struct.clone());
         return cur_struct.get_name().clone();
     }
+
+    pub fn has_struct_with_name(&self, name: &str) -> bool {
+        for s in self.get_structs() {
+            if s.get_name() == name {
+                return true;
+            }
+        }
+        return false;
+    }
 }
 
 pub struct OngoingCodegen {
