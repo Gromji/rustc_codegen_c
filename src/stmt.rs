@@ -1,8 +1,8 @@
 use crate::aggregate::handle_aggregate;
+use crate::header::handle_checked_op;
 // use crate::checked::handle_checked_op;
 use crate::crepr::{indent, Expression, Representable, RepresentationContext};
 use crate::function::{CFunction, CodegenFunctionCx};
-use crate::ty::rust_to_c_type;
 use crate::utils;
 use rustc_middle::mir::{ConstOperand, ConstValue, Operand, Place, Rvalue, StatementKind};
 use rustc_middle::ty::{ParamEnv, Ty};
@@ -118,8 +118,7 @@ fn handle_assign<'tcx, 'ccx>(
             let rhs = handle_operand(fn_cx, &operands.1);
             let ty = operands.0.ty(&fn_cx.mir.local_decls, fn_cx.tcx);
 
-            // handle_checked_op(fn_cx, op.into(), lhs, rhs, &ty)
-            Expression::BinaryOp { op: op.into(), lhs: Box::new(lhs), rhs: Box::new(rhs) }
+            handle_checked_op(fn_cx, op.into(), lhs, rhs, &ty)
         }
         Rvalue::Aggregate(kind, fields) => {
             // Return instantly because it already handles assignments.

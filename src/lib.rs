@@ -25,6 +25,7 @@ mod bb;
 mod crepr;
 mod definition;
 mod function;
+mod header;
 mod include;
 mod prefix;
 mod stmt;
