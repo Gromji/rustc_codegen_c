@@ -40,25 +40,27 @@ impl<'tcx> CodegenFunctionCx<'tcx, '_> {
 
 impl Representable for CFunction {
     fn repr(&self, f: &mut fmt::Formatter<'_>, context: &RepresentationContext) -> fmt::Result {
-        self.return_ty.repr(f, context)?;
+        let mut new_context = context.clone();
+        new_context.cur_fn = Some(&self);
+        self.return_ty.repr(f, &new_context)?;
         write!(f, " {}(", self.name)?;
         for (i, arg) in self.signature.iter().enumerate() {
             if i > 0 {
                 write!(f, ", ")?;
             }
-            arg.repr(f, context)?;
+            arg.repr(f, &new_context)?;
         }
         write!(f, ") ")?;
 
         write!(f, "{{\n")?;
         for decl in &self.local_decl {
-            indent(f, context)?;
-            decl.repr(f, context)?;
+            indent(f, &new_context)?;
+            decl.repr(f, &new_context)?;
             write!(f, "\n")?;
         }
 
         for (i, bb) in self.basic_blocks.iter().enumerate() {
-            bb.repr(f, context)?;
+            bb.repr(f, &new_context)?;
         }
 
         write!(f, "}}")
@@ -114,10 +116,15 @@ impl CFunction {
         self.local_decl.push(var);
     }
 
-    pub fn get_local_var(&self, idx: usize) -> &CVarDecl {
+    pub fn get_local_var(&self, idx: usize) -> &CVarDef {
         for local_var in &self.local_decl {
             if local_var.get_id() == idx {
-                return local_var;
+                return local_var.get_var();
+            }
+        }
+        for sig_var in &self.signature {
+            if sig_var.get_id() == idx {
+                return sig_var;
             }
         }
         panic!("Local variable with id {} not found", idx);

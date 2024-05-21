@@ -14,27 +14,25 @@ impl CVarDef {
     pub fn new(local_id: usize, name: String, ty: CType) -> Self {
         Self { local_id, name, ty }
     }
+    pub fn get_id(&self) -> usize {
+        self.local_id
+    }
     pub fn same_type(&self, other: &CVarDef) -> bool {
         self.ty == other.ty
     }
     pub fn get_name(&self) -> String {
         self.name.clone()
     }
+    pub fn get_type(&self) -> &CType {
+        &self.ty
+    }
 }
 
 impl Representable for CVarDef {
     fn repr(&self, f: &mut fmt::Formatter<'_>, _context: &RepresentationContext) -> fmt::Result {
-        self.ty.repr(
-            f,
-            &RepresentationContext {
-                indent: _context.indent,
-                indent_string: _context.indent_string.clone(),
-                include_newline: _context.include_newline,
-                include_comments: _context.include_comments,
-                var_name: Some(self.name.clone()),
-                ..Default::default()
-            },
-        )
+        let mut new_context = _context.clone();
+        new_context.var_name = Some(self.name.clone());
+        self.ty.repr(f, &new_context)
     }
 }
 
@@ -54,6 +52,9 @@ pub struct CVarDecl {
 impl CVarDecl {
     pub fn new(var: CVarDef, value: Option<String>) -> Self {
         Self { var, value }
+    }
+    pub fn get_var(&self) -> &CVarDef {
+        &self.var
     }
     pub fn get_var_type(&self) -> &CType {
         &self.var.ty

@@ -1,10 +1,10 @@
 use std::fmt::{self, Debug};
 
-use crate::bb::BasicBlockIdentifier;
+use crate::{bb::BasicBlockIdentifier, function::CFunction};
 
 // TODO we could pass more information to this context, such as the current function, to allow for more context-aware representations
 #[derive(Debug, Clone, Default)]
-pub struct RepresentationContext {
+pub struct RepresentationContext<'ctx> {
     pub indent: usize,
     pub indent_string: String,
 
@@ -12,6 +12,7 @@ pub struct RepresentationContext {
     pub include_comments: bool,
 
     pub var_name: Option<String>,
+    pub cur_fn: Option<&'ctx CFunction>,
     pub n_ptr: u8,
 }
 
@@ -175,17 +176,12 @@ pub enum Expression {
         lhs: Box<Expression>,
         rhs: Box<Expression>,
     },
-    CheckedBinaryOp {
-        op: BinOpType,
-        lhs: Box<Expression>,
-        rhs: Box<Expression>,
-    },
     UnaryOp {
         op: UnaryOpType,
         val: Box<Expression>,
     },
     Struct {
-        name: String,
+        name: Box<Expression>,
         fields: Vec<Expression>,
     },
     Array {
@@ -216,14 +212,20 @@ impl Representable for Expression {
                 write!(f, "{}", value)
             }
 
-            Expression::Variable { local, idx } => match idx {
-                Some(idx) => {
-                    write!(f, "var{}[{}]", local, idx)
+            Expression::Variable { local, idx } => {
+                let name = match context.cur_fn {
+                    Some(cur_fn) => cur_fn.get_local_var_name(*local),
+                    None => format!("var{}", local), // This should never be the case.
+                };
+                match idx {
+                    Some(idx) => {
+                        write!(f, "{}[{}]", name, idx)
+                    }
+                    None => {
+                        write!(f, "{}", name)
+                    }
                 }
-                None => {
-                    write!(f, "var{}", local)
-                }
-            },
+            }
 
             Expression::Assignment { lhs, rhs } => {
                 // {} = {}
@@ -232,28 +234,6 @@ impl Representable for Expression {
                 rhs.repr(f, context)?;
                 Ok(())
             }
-
-            Expression::CheckedBinaryOp { op, lhs, rhs } => {
-                /*
-                   we could handle these functions with __builtin_add_overflow, __builtin_sub_overflow, __builtin_mul_overflow,
-                   however these are GCC extensions which are not available in all compilers.
-                */
-                match op {
-                    BinOpType::Add | BinOpType::Sub | BinOpType::Mul => {
-                        lhs.repr(f, context)?;
-                        write!(f, " ")?;
-                        op.repr(f, context)?;
-                        write!(f, " ")?;
-                        rhs.repr(f, context)?;
-                        Ok(())
-                    }
-
-                    _ => {
-                        unreachable!("CheckedBinaryOp doesn't exist for type {:?}", op)
-                    }
-                }
-            }
-
             Expression::BinaryOp { op, lhs, rhs } => {
                 // {} {} {} (eg. {1} {+} {5})
                 lhs.repr(f, context)?;
@@ -273,7 +253,9 @@ impl Representable for Expression {
 
             Expression::Struct { name, fields } => {
                 // (struct {}){ {} } (eg. (struct struct_name) { {1}, {2} })
-                write!(f, "({}){{ ", name)?;
+                write!(f, "(")?;
+                name.repr(f, context)?;
+                write!(f, "){{ ")?;
                 for (i, field) in fields.iter().enumerate() {
                     if i != 0 {
                         write!(f, ", ")?;

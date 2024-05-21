@@ -19,7 +19,7 @@ use core::panic;
 use rustc_codegen_ssa::{CodegenResults, CompiledModule, CrateInfo};
 use rustc_metadata::EncodedMetadata;
 use rustc_middle::mir::mono::{CodegenUnit, MonoItem};
-use rustc_middle::ty::{print::with_no_trimmed_paths, List, Ty};
+use rustc_middle::ty::print::with_no_trimmed_paths;
 use rustc_session::config::{OutputFilenames, OutputType};
 use tracing_subscriber::util::SubscriberInitExt;
 
@@ -152,7 +152,13 @@ impl OngoingCodegen {
 
         write::write_structs(ongoing_codegen.context.get_structs(), &mut header_file);
 
-        write::write_functions(ongoing_codegen.context.get_functions(), &mut file);
+        write::write_functions(ongoing_codegen.context.get_functions(), &mut file, false);
+
+        write::write_functions(
+            ongoing_codegen.context.get_header_functions(),
+            &mut header_file,
+            true,
+        );
 
         let modules = vec![
             CompiledModule {

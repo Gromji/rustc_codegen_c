@@ -3,7 +3,6 @@ use crate::{
     definition::CVarDef,
     ty::CType,
 };
-use rustc_middle::ty::{List, Ty};
 use std::fmt::{self, Debug};
 
 #[derive(Clone)]
@@ -26,6 +25,9 @@ impl CStruct {
 
     pub fn get_name(&self) -> &String {
         &self.name
+    }
+    pub fn get_field(&self, idx: usize) -> &CVarDef {
+        &self.fields[idx]
     }
 
     #[allow(dead_code)]

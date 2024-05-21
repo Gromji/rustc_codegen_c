@@ -38,13 +38,13 @@ pub fn write_structs(structs: &Vec<structure::CStruct>, file: &mut File) {
 }
 
 // Write the functions to the file
-pub fn write_functions(functions: &Vec<function::CFunction>, file: &mut File) {
+pub fn write_functions(functions: &Vec<function::CFunction>, file: &mut File, is_header: bool) {
     let main_exists = functions.iter().any(|f| f.is_main());
 
     // Write newline
     file.write_all(b"\n\n").unwrap();
 
-    if !main_exists {
+    if !main_exists && !is_header {
         file.write_all(
             b"int main(int argc, char* argv[]) {\
             \n  return 0;\

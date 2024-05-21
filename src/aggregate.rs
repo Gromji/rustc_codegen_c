@@ -17,7 +17,7 @@ where
     let span = debug_span!("handle_aggregate").entered();
     let var_idx = place.local.as_usize();
     let local_var = c_fn.get_local_var(var_idx);
-    let var_type = local_var.get_var_type();
+    let var_type = local_var.get_type();
     let result = match *kind {
         AggregateKind::Tuple => match var_type {
             CType::Struct(struct_info) => {
@@ -28,7 +28,7 @@ where
                 }
 
                 let rhs = crepr::Expression::Struct {
-                    name: struct_info.name.clone(),
+                    name: Box::new(Expression::Constant { value: struct_info.name.clone() }),
                     fields: field_expressions,
                 };
                 let lhs = crepr::Expression::Variable { local: var_idx, idx: None };
@@ -59,7 +59,7 @@ where
                     field_expressions.push(expression);
                 }
                 let rhs = crepr::Expression::Struct {
-                    name: struct_info.name.clone(),
+                    name: Box::new(Expression::Constant { value: struct_info.name.clone() }),
                     fields: field_expressions,
                 };
                 let lhs = crepr::Expression::Variable { local: var_idx, idx: None };
