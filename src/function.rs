@@ -86,6 +86,10 @@ impl CFunction {
         self.name == "main"
     }
 
+    pub fn get_name(&self) -> &str {
+        &self.name
+    }
+
     pub fn push_bb(&mut self, bb: BasicBlock) {
         self.basic_blocks.push(bb);
     }
@@ -111,10 +115,15 @@ impl CFunction {
     }
 
     pub fn get_local_var(&self, idx: usize) -> &CVarDecl {
-        &self.local_decl[idx]
+        for local_var in &self.local_decl {
+            if local_var.get_id() == idx {
+                return local_var;
+            }
+        }
+        panic!("Local variable with id {} not found", idx);
     }
     pub fn get_local_var_name(&self, idx: usize) -> String {
-        self.local_decl[idx].get_name()
+        self.get_local_var(idx).get_name()
     }
 
     #[allow(dead_code)]
@@ -154,7 +163,7 @@ fn handle_decls<'tcx>(
         // add index to set
         set.insert(arg.index());
 
-        let c_var = CVarDef::new(name, rust_to_c_type(tcx, ongoing_codegen, &ty));
+        let c_var = CVarDef::new(arg.index(), name, rust_to_c_type(tcx, ongoing_codegen, &ty));
         c_fn.add_signature_var(c_var);
     });
 
@@ -168,7 +177,7 @@ fn handle_decls<'tcx>(
         let ty = decl.ty;
         let name = format!("var{}", idx);
         let c_ty = rust_to_c_type(tcx, ongoing_codegen, &ty);
-        let c_var = CVarDef::new(name, c_ty);
+        let c_var = CVarDef::new(idx, name, c_ty);
         c_fn.add_var_decl(CVarDecl::new(c_var, None));
     }
 }
@@ -187,8 +196,7 @@ pub fn handle_fn<'tcx>(
     inst: Instance<'tcx>,
 ) {
     let mir = tcx.instance_mir(inst.def);
-    let fn_cx =
-        CodegenFunctionCx { tcx: tcx, ongoing_codegen: ongoing_codegen, instance: inst, mir };
+    let mut fn_cx = CodegenFunctionCx { tcx, ongoing_codegen, instance: inst, mir };
 
     let mut c_fn = CFunction::new(
         format_fn_name(&tcx.symbol_name(inst)),
@@ -204,7 +212,7 @@ pub fn handle_fn<'tcx>(
     trace!("{:?}", c_fn);
 
     // Handle basic blocks
-    bb::handle_bbs(&fn_cx, &mut c_fn);
+    bb::handle_bbs(&mut fn_cx, &mut c_fn);
 
     // If is main prefix with "_"
     if c_fn.is_main() {

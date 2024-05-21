@@ -34,7 +34,7 @@ impl Representable for CType {
             // Custom struct for Rust's Unit type
             CType::Unit => {
                 let ptrs = "*".repeat(context.n_ptr.into());
-                let c_type = format!("struct __Unit{}", ptrs);
+                let c_type = format!("__Unit{}", ptrs);
                 match &context.var_name {
                     Some(name) => write!(f, "{c_type} {name}"),
                     None => write!(f, "{c_type}"),
@@ -91,7 +91,7 @@ impl Representable for CType {
             CType::Struct(info) => {
                 let struct_name = &info.name;
                 let ptrs = "*".repeat(context.n_ptr.into());
-                let c_type = format!("struct {struct_name}{ptrs}");
+                let c_type = format!("{struct_name}{ptrs}");
                 match &context.var_name {
                     Some(name) => write!(f, "{c_type} {name}"),
                     None => write!(f, "{c_type}"),
@@ -322,9 +322,11 @@ pub fn rust_to_c_type<'tcx>(
     ty: &Ty<'tcx>,
 ) -> CType {
     match ty.kind() {
-        rustc_middle::ty::Tuple(t) => {
-            let struct_name = ongoing_codegen.context.get_struct_name(t);
-            CType::Struct(CStructInfo::new(&struct_name))
+        rustc_middle::ty::Tuple(types) => {
+            let field_types =
+                types.iter().map(|x| rust_to_c_type(tcx, ongoing_codegen, &x)).collect();
+            let c_struct = ongoing_codegen.context.get_struct(&field_types);
+            CType::Struct(CStructInfo::new(&c_struct.get_name()))
         }
         rustc_middle::ty::Adt(adt_def, generic_fields) => match adt_def.adt_kind() {
             rustc_middle::ty::AdtKind::Struct => {
@@ -340,8 +342,10 @@ pub fn rust_to_c_type<'tcx>(
                 if !ongoing_codegen.context.has_struct_with_name(&struct_name) {
                     let field_types: Vec<CVarDef> = adt_def
                         .all_fields()
-                        .map(|field| {
+                        .enumerate()
+                        .map(|(idx, field)| {
                             CVarDef::new(
+                                idx,
                                 field.name.to_string(),
                                 rust_to_c_type(
                                     tcx,

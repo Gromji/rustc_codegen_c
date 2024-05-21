@@ -57,8 +57,9 @@ fn prefix_functions() -> Vec<CFunction> {
 
     let mut main = CFunction::new("main".to_string(), CType::Int(CIntTy::Int32));
 
-    main.add_signature_var(CVarDef::new("argc".to_string(), CType::Int(CIntTy::Int32)));
+    main.add_signature_var(CVarDef::new(0, "argc".to_string(), CType::Int(CIntTy::Int32)));
     main.add_signature_var(CVarDef::new(
+        1,
         "argv".to_string(),
         CType::Array(Box::new(CType::Pointer(Box::new(CType::Int(CIntTy::Int8)))), 0),
     ));

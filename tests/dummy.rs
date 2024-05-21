@@ -7,7 +7,7 @@ fn main() {
     let a = test();
 
     let a = add_many(a);
-    
+
     if a > 0 {
         let b = 2;
     } else {
@@ -32,7 +32,7 @@ fn test() -> i32 {
     let p: Pair<i32, bool> = Pair { first: 128, second: true };
     let p2 = Pair { first: false, second: true };
     let k = 5;
-    let pair = (128, true);
+    let pair = (128, t);
     let unkonwn = (128, true, 1.0);
     let l: [i32; 3] = [1, 2, 3];
     let o = 0..1;
@@ -40,11 +40,10 @@ fn test() -> i32 {
     return 5;
 }
 
-
 fn add_many(x: i32) -> i32 {
     let mut b = x;
-    
-    while b < b*b {
+
+    while b < b * b {
         b += 3;
     }
 

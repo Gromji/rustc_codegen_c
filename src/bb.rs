@@ -275,7 +275,7 @@ pub fn handle_terminator<'tcx, 'ccx>(
     }
 }
 
-pub fn handle_bbs<'tcx, 'ccx>(fn_cx: &CodegenFunctionCx<'tcx, 'ccx>, c_fn: &mut CFunction) {
+pub fn handle_bbs<'tcx, 'ccx>(fn_cx: &mut CodegenFunctionCx<'tcx, 'ccx>, c_fn: &mut CFunction) {
     let blocks = &fn_cx.mir.basic_blocks;
 
     let _span = debug_span!("handle_bbs").entered();

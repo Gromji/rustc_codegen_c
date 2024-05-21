@@ -5,13 +5,14 @@ use std::fmt::{self, Debug};
 
 #[derive(Clone, PartialEq, Eq)]
 pub struct CVarDef {
+    local_id: usize,
     name: String,
     ty: CType,
 }
 
 impl CVarDef {
-    pub fn new(name: String, ty: CType) -> Self {
-        Self { name, ty }
+    pub fn new(local_id: usize, name: String, ty: CType) -> Self {
+        Self { local_id, name, ty }
     }
     pub fn same_type(&self, other: &CVarDef) -> bool {
         self.ty == other.ty
@@ -59,6 +60,9 @@ impl CVarDecl {
     }
     pub fn get_name(&self) -> String {
         self.var.get_name()
+    }
+    pub fn get_id(&self) -> usize {
+        self.var.local_id
     }
 }
 

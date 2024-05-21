@@ -27,12 +27,14 @@ use crate::function;
 use crate::include;
 use crate::prefix;
 use crate::structure;
+use crate::ty::CType;
 use crate::write;
 
 pub struct Context {
     includes: Vec<include::Include>,
     header_includes: Vec<include::Include>,
     functions: Vec<function::CFunction>,
+    header_functions: Vec<function::CFunction>,
     structs: Vec<structure::CStruct>,
 }
 
@@ -42,6 +44,7 @@ impl Context {
             includes: Vec::new(),
             header_includes: Vec::new(),
             functions: Vec::new(),
+            header_functions: Vec::new(),
             structs: Vec::new(),
         }
     }
@@ -69,6 +72,14 @@ impl Context {
         &mut self.functions
     }
 
+    pub fn get_header_functions(&self) -> &Vec<function::CFunction> {
+        &self.header_functions
+    }
+
+    pub fn get_mut_header_functions(&mut self) -> &mut Vec<function::CFunction> {
+        &mut self.header_functions
+    }
+
     pub fn get_structs(&self) -> &Vec<structure::CStruct> {
         &self.structs
     }
@@ -76,18 +87,28 @@ impl Context {
     pub fn get_mut_structs(&mut self) -> &mut Vec<structure::CStruct> {
         &mut self.structs
     }
+
+    pub fn exists_header_fn_with_name(&self, name: &str) -> bool {
+        for f in self.get_header_functions() {
+            if f.get_name() == name {
+                return true;
+            }
+        }
+        return false;
+    }
+
     /// Get the name of a struct that has the same list of types, or create one if it doesn't exist.
-    pub fn get_struct_name(&mut self, list: &List<Ty>) -> String {
+    pub fn get_struct(&mut self, list: &Vec<CType>) -> structure::CStruct {
         let cur_struct = structure::CStruct::from(list);
         let structs = self.get_structs();
         for s in structs {
             if s == &cur_struct {
-                return s.get_name().clone();
+                return s.clone();
             }
         }
         // Struct doesn't exist, create it
         self.get_mut_structs().push(cur_struct.clone());
-        return cur_struct.get_name().clone();
+        return cur_struct;
     }
 
     pub fn has_struct_with_name(&self, name: &str) -> bool {

@@ -112,6 +112,28 @@ impl Representable for BinOpType {
         }
     }
 }
+impl fmt::Display for BinOpType {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            BinOpType::Add => write!(f, "add"),
+            BinOpType::Sub => write!(f, "sub"),
+            BinOpType::Mul => write!(f, "mul"),
+            BinOpType::Div => write!(f, "div"),
+            BinOpType::Mod => write!(f, "mod"),
+            BinOpType::And => write!(f, "and"),
+            BinOpType::Or => write!(f, "or"),
+            BinOpType::Xor => write!(f, "xor"),
+            BinOpType::Shl => write!(f, "shl"),
+            BinOpType::Shr => write!(f, "shr"),
+            BinOpType::Eq => write!(f, "eq"),
+            BinOpType::Ne => write!(f, "ne"),
+            BinOpType::Lt => write!(f, "lt"),
+            BinOpType::Le => write!(f, "le"),
+            BinOpType::Gt => write!(f, "gt"),
+            BinOpType::Ge => write!(f, "ge"),
+        }
+    }
+}
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 #[allow(dead_code)]
@@ -137,19 +159,54 @@ pub struct Constant {
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Expression {
-    Constant { value: String },
-    Variable { local: usize, idx: Option<usize> }, // TODO this might not be an appropriate representation, especially if we plan to add debug info into the mix
-    Assignment { lhs: Box<Expression>, rhs: Box<Expression> },
-    BinaryOp { op: BinOpType, lhs: Box<Expression>, rhs: Box<Expression> },
-    CheckedBinaryOp { op: BinOpType, lhs: Box<Expression>, rhs: Box<Expression> },
-    UnaryOp { op: UnaryOpType, val: Box<Expression> },
-    Struct { name: String, fields: Vec<Expression> },
-    Array { fields: Vec<Expression> },
-    Goto { target: BasicBlockIdentifier},
-    Return { value: Box<Expression> },
-    SwitchJump { value: Box<Expression>, cases: Vec<(Box<Expression>, BasicBlockIdentifier)>, default: BasicBlockIdentifier},
+    Constant {
+        value: String,
+    },
+    Variable {
+        local: usize,
+        idx: Option<usize>,
+    }, // TODO this might not be an appropriate representation, especially if we plan to add debug info into the mix
+    Assignment {
+        lhs: Box<Expression>,
+        rhs: Box<Expression>,
+    },
+    BinaryOp {
+        op: BinOpType,
+        lhs: Box<Expression>,
+        rhs: Box<Expression>,
+    },
+    CheckedBinaryOp {
+        op: BinOpType,
+        lhs: Box<Expression>,
+        rhs: Box<Expression>,
+    },
+    UnaryOp {
+        op: UnaryOpType,
+        val: Box<Expression>,
+    },
+    Struct {
+        name: String,
+        fields: Vec<Expression>,
+    },
+    Array {
+        fields: Vec<Expression>,
+    },
+    Goto {
+        target: BasicBlockIdentifier,
+    },
+    Return {
+        value: Box<Expression>,
+    },
+    SwitchJump {
+        value: Box<Expression>,
+        cases: Vec<(Box<Expression>, BasicBlockIdentifier)>,
+        default: BasicBlockIdentifier,
+    },
     NoOp {},
-    FnCall { function: Box<Expression>, args: Vec<Expression> },
+    FnCall {
+        function: Box<Expression>,
+        args: Vec<Expression>,
+    },
 }
 
 impl Representable for Expression {
@@ -216,7 +273,7 @@ impl Representable for Expression {
 
             Expression::Struct { name, fields } => {
                 // (struct {}){ {} } (eg. (struct struct_name) { {1}, {2} })
-                write!(f, "(struct {}){{ ", name)?;
+                write!(f, "({}){{ ", name)?;
                 for (i, field) in fields.iter().enumerate() {
                     if i != 0 {
                         write!(f, ", ")?;
@@ -286,7 +343,6 @@ impl Representable for Expression {
                 indent(f, context);
                 write!(f, "}}")?;
                 Ok(())
-            
             }
 
             Expression::FnCall { function, args } => {
