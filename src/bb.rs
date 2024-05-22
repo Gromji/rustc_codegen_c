@@ -1,6 +1,7 @@
 use std::fmt::{self, Debug};
 
-use crate::crepr::{indent, Expression, Representable, UnaryOpType};
+use crate::crepr::{indent, Representable};
+use crate::expression::{Expression, UnaryOpType};
 use crate::function::{format_fn_name, CFunction, CodegenFunctionCx};
 use crate::stmt::{handle_operand, handle_stmt, Statement};
 use rustc_middle::mir::BasicBlockData;

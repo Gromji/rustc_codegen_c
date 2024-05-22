@@ -8,7 +8,7 @@ use crate::structure::CStruct;
 use crate::ty::CIntTy;
 use crate::ty::CType;
 
-use crate::crepr::Expression;
+use crate::expression::Expression;
 use crate::stmt::Statement;
 use crate::HEADER_FILE_NAME;
 

@@ -1,7 +1,7 @@
 use crate::{
     bb::{BasicBlock, BasicBlockIdentifier},
-    crepr::{self, BinOpType, Expression},
     definition::{CVarDecl, CVarDef},
+    expression::{BinOpType, Expression},
     function::{CFunction, CodegenFunctionCx},
     stmt::Statement,
     structure::CStruct,
@@ -104,7 +104,7 @@ pub fn handle_checked_op<'tcx, 'ccx>(
         fn_cx.ongoing_codegen.context.get_mut_header_functions().push(checked_op);
     }
     span.exit();
-    crepr::Expression::FnCall {
+    Expression::FnCall {
         function: Box::new(Expression::Constant { value: fn_name }),
         args: vec![lhs, rhs],
     }

@@ -1,4 +1,5 @@
-use crate::crepr::{self, Expression};
+use crate::crepr::{self};
+use crate::expression::Expression;
 use crate::function::{CFunction, CodegenFunctionCx};
 use crate::stmt::handle_operand;
 use crate::ty::CType;
@@ -27,12 +28,12 @@ where
                     field_expressions.push(expression);
                 }
 
-                let rhs = crepr::Expression::Struct {
+                let rhs = Expression::Struct {
                     name: Box::new(Expression::Constant { value: struct_info.name.clone() }),
                     fields: field_expressions,
                 };
-                let lhs = crepr::Expression::Variable { local: var_idx, idx: None };
-                crepr::Expression::Assignment { lhs: Box::new(lhs), rhs: Box::new(rhs) }
+                let lhs = Expression::Variable { local: var_idx, idx: None };
+                Expression::Assignment { lhs: Box::new(lhs), rhs: Box::new(rhs) }
             }
             _ => {
                 unreachable!("Error: Type should have been a struct!");
@@ -42,14 +43,14 @@ where
             let mut field_expressions = Vec::new();
             for (i, field) in fields.enumerate() {
                 let rh_expression = handle_operand(fn_cx, &field);
-                let lh_expression = crepr::Expression::Variable { local: var_idx, idx: Some(i) };
-                field_expressions.push(crepr::Expression::Assignment {
+                let lh_expression = Expression::Variable { local: var_idx, idx: Some(i) };
+                field_expressions.push(Expression::Assignment {
                     lhs: Box::new(lh_expression),
                     rhs: Box::new(rh_expression),
                 });
             }
 
-            crepr::Expression::Array { fields: field_expressions }
+            Expression::Array { fields: field_expressions }
         }
         AggregateKind::Adt(_, _, _, _, _) => match var_type {
             CType::Struct(struct_info) => {
@@ -58,21 +59,21 @@ where
                     let expression = handle_operand(fn_cx, &field);
                     field_expressions.push(expression);
                 }
-                let rhs = crepr::Expression::Struct {
+                let rhs = Expression::Struct {
                     name: Box::new(Expression::Constant { value: struct_info.name.clone() }),
                     fields: field_expressions,
                 };
-                let lhs = crepr::Expression::Variable { local: var_idx, idx: None };
-                crepr::Expression::Assignment { lhs: Box::new(lhs), rhs: Box::new(rhs) }
+                let lhs = Expression::Variable { local: var_idx, idx: None };
+                Expression::Assignment { lhs: Box::new(lhs), rhs: Box::new(rhs) }
             }
             _ => {
                 warn!("Unhandled aggregate kind: {:?}", kind);
-                crepr::Expression::NoOp {}
+                Expression::NoOp {}
             }
         },
         _ => {
             warn!("Unhandled aggregate kind: {:?}", kind);
-            crepr::Expression::NoOp {}
+            Expression::NoOp {}
         }
     };
     span.exit();

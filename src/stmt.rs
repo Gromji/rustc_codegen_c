@@ -1,8 +1,8 @@
 use crate::aggregate::handle_aggregate;
-use crate::header::handle_checked_op;
-// use crate::checked::handle_checked_op;
-use crate::crepr::{indent, Expression, Representable, RepresentationContext};
+use crate::crepr::{indent, Representable, RepresentationContext};
+use crate::expression::Expression;
 use crate::function::{CFunction, CodegenFunctionCx};
+use crate::header::handle_checked_op;
 use crate::utils;
 use rustc_middle::mir::{ConstOperand, ConstValue, Operand, Place, Rvalue, StatementKind};
 use rustc_middle::ty::{ParamEnv, Ty};
