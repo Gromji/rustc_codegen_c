@@ -226,7 +226,7 @@ impl CUIntTy {
             CUIntTy::UInt32 => "uint32_t",
             CUIntTy::UInt64 => "uint64_t",
             // Might cause trouble on some gcc versions
-            CUIntTy::UInt128 => "unsigned __int128_t",
+            CUIntTy::UInt128 => "__uint128_t",
         }
     }
 

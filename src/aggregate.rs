@@ -1,4 +1,3 @@
-use crate::crepr::{self};
 use crate::expression::Expression;
 use crate::function::{CFunction, CodegenFunctionCx};
 use crate::stmt::handle_operand;

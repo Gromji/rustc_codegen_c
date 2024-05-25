@@ -24,6 +24,7 @@ use rustc_session::config::{OutputFilenames, OutputType};
 use tracing_subscriber::util::SubscriberInitExt;
 
 use crate::function;
+use crate::header;
 use crate::include;
 use crate::prefix;
 use crate::structure;
@@ -33,6 +34,7 @@ use crate::write;
 pub struct Context {
     includes: Vec<include::Include>,
     header_includes: Vec<include::Include>,
+    defines: Vec<header::CDefine>,
     functions: Vec<function::CFunction>,
     header_functions: Vec<function::CFunction>,
     structs: Vec<structure::CStruct>,
@@ -43,6 +45,7 @@ impl Context {
         Self {
             includes: Vec::new(),
             header_includes: Vec::new(),
+            defines: Vec::new(),
             functions: Vec::new(),
             header_functions: Vec::new(),
             structs: Vec::new(),
@@ -62,6 +65,12 @@ impl Context {
 
     pub fn get_mut_header_includes(&mut self) -> &mut Vec<include::Include> {
         &mut self.header_includes
+    }
+    pub fn get_defines(&self) -> &Vec<header::CDefine> {
+        &self.defines
+    }
+    pub fn get_mut_defines(&mut self) -> &mut Vec<header::CDefine> {
+        &mut self.defines
     }
 
     pub fn get_functions(&self) -> &Vec<function::CFunction> {
@@ -119,6 +128,15 @@ impl Context {
         }
         return false;
     }
+
+    pub fn has_define_with_name(&self, name: &String) -> bool {
+        for d in self.get_defines() {
+            if d.get_name() == *name {
+                return true;
+            }
+        }
+        return false;
+    }
 }
 
 pub struct OngoingCodegen {
@@ -147,6 +165,8 @@ impl OngoingCodegen {
             &mut file,
             &mut header_file,
         );
+
+        write::write_defines(ongoing_codegen.context.get_defines(), &mut header_file);
 
         write::write_prototypes(ongoing_codegen.context.get_functions(), &mut header_file);
 

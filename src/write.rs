@@ -1,6 +1,7 @@
 use std::{fs::File, io::Write};
 
 use crate::function;
+use crate::header;
 use crate::include;
 use crate::structure;
 
@@ -17,6 +18,15 @@ pub fn write_includes(
 
     file.write_all(includes.join("\n").as_bytes()).unwrap();
     header_file.write_all(header_includes.join("\n").as_bytes()).unwrap();
+}
+
+// Write Defines
+pub fn write_defines(defines: &Vec<header::CDefine>, file: &mut File) {
+    let defines = defines.iter().map(|d| format!("{:?}", d)).collect::<Vec<String>>();
+
+    // Write newline
+    file.write_all(b"\n\n").unwrap();
+    file.write_all(defines.join("\n").as_bytes()).unwrap();
 }
 
 // Write function prototypes

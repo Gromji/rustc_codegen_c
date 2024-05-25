@@ -1,5 +1,6 @@
 use crate::crepr::Representable;
 use crate::crepr::RepresentationContext;
+use crate::expression::Expression;
 use crate::ty::CType;
 use std::fmt::{self, Debug};
 
@@ -45,12 +46,12 @@ impl Debug for CVarDef {
 #[derive(Clone, PartialEq, Eq)]
 
 pub struct CVarDecl {
-    pub var: CVarDef,
-    pub value: Option<String>,
+    var: CVarDef,
+    value: Option<Box<Expression>>,
 }
 
 impl CVarDecl {
-    pub fn new(var: CVarDef, value: Option<String>) -> Self {
+    pub fn new(var: CVarDef, value: Option<Box<Expression>>) -> Self {
         Self { var, value }
     }
     pub fn get_var(&self) -> &CVarDef {
@@ -72,7 +73,9 @@ impl Representable for CVarDecl {
         match &self.value {
             Some(value) => {
                 self.var.repr(f, _context)?;
-                write!(f, " = {};", value)
+                write!(f, " = ")?;
+                value.repr(f, _context)?;
+                write!(f, ";")
             }
             None => {
                 self.var.repr(f, _context)?;

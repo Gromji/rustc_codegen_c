@@ -3,16 +3,20 @@
 #![allow(unused_variables)]
 fn main() {
     let _a = 1;
-    let k1: u32 = 10;
-    let k2: u32 = 20;
-    let k3: u32 = k1 + k2;
-    let t1: u64 = 100;
-    let t2: u64 = 200;
-    let t3: u64 = t1 + t2;
+    let k1: f32 = 10.0;
+    let k2: f32 = 20.0;
+    let k3 = k1 + k2;
+    let t1: i128 = 100;
+    let t2: i128 = 200;
+    let t3: i128 = t1 * t2;
     let t4 = t2 - t1;
     let i1 = 123;
     let i2 = 321;
     let i3 = i1 - i2;
+    let b1 = t1 < t2;
+    let b2 = k1 > k2;
+    let b3 = b1 && b2;
+    let b4 = b1 || b2;
 
     let a = test();
 
@@ -53,7 +57,7 @@ fn test() -> i32 {
 fn add_many(x: i32) -> i32 {
     let mut b = x;
 
-    while b < b + b {
+    while b < b * b {
         b += 3;
     }
 
