@@ -191,7 +191,7 @@ impl OngoingCodegen {
                 llvm_ir: None,
             },
             CompiledModule {
-                name: format!("{}_h", header_name),
+                name: header_name,
                 kind: rustc_codegen_ssa::ModuleKind::Metadata,
                 object: Some(header_path),
                 bytecode: None,
