@@ -13,6 +13,9 @@ pub enum BinOpType {
     Add,
     Sub,
     Mul,
+    CheckedAdd,
+    CheckedSub,
+    CheckedMul,
     Div,
     Mod,
     And,
@@ -55,6 +58,9 @@ impl From<&rustc_middle::mir::BinOp> for BinOpType {
             rustc_middle::mir::BinOp::Cmp => BinOpType::Eq,
 
             rustc_middle::mir::BinOp::Offset => BinOpType::Add, // TODO this is a guess
+            rustc_middle::mir::BinOp::AddWithOverflow => BinOpType::CheckedAdd,
+            rustc_middle::mir::BinOp::SubWithOverflow => BinOpType::CheckedSub,
+            rustc_middle::mir::BinOp::MulWithOverflow => BinOpType::CheckedMul,
         }
     }
 }
@@ -65,6 +71,9 @@ impl Representable for BinOpType {
             BinOpType::Add => write!(f, "+"),
             BinOpType::Sub => write!(f, "-"),
             BinOpType::Mul => write!(f, "*"),
+            BinOpType::CheckedAdd => write!(f, "+"),
+            BinOpType::CheckedSub => write!(f, "-"),
+            BinOpType::CheckedMul => write!(f, "*"),
             BinOpType::Div => write!(f, "/"),
             BinOpType::Mod => write!(f, "%"),
             BinOpType::And => write!(f, "&"),
@@ -87,6 +96,9 @@ impl fmt::Display for BinOpType {
             BinOpType::Add => write!(f, "add"),
             BinOpType::Sub => write!(f, "sub"),
             BinOpType::Mul => write!(f, "mul"),
+            BinOpType::CheckedAdd => write!(f, "checked_add"),
+            BinOpType::CheckedSub => write!(f, "checked_sub"),
+            BinOpType::CheckedMul => write!(f, "checked_mul"),
             BinOpType::Div => write!(f, "div"),
             BinOpType::Mod => write!(f, "mod"),
             BinOpType::And => write!(f, "and"),

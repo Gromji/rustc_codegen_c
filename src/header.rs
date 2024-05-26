@@ -51,27 +51,27 @@ pub fn handle_checked_op<'tcx, 'ccx>(
 ) -> Expression {
     let span = debug_span!("handle_checked_op").entered();
     // We can change the naming of the functions later
-    let fn_name = format!("checked_{op}_{ty:?}");
+    let fn_name = format!("{op}_{ty:?}");
     let fields = vec![rust_to_c_type(fn_cx.tcx, fn_cx.ongoing_codegen, ty), CType::Bool];
     let c_struct = fn_cx.ongoing_codegen.context.get_struct(&fields);
     if !fn_cx.ongoing_codegen.context.exists_header_fn_with_name(fn_name.as_str()) {
         warn!("Function for {fn_name} not found, creating one!");
         let checked_op = match op {
-            BinOpType::Add => {
+            BinOpType::CheckedAdd => {
                 if ty.is_signed() {
                     signed_add(fn_cx, &fn_name, &c_struct)
                 } else {
                     unsigned_add(fn_cx, &fn_name, &c_struct)
                 }
             }
-            BinOpType::Sub => {
+            BinOpType::CheckedSub => {
                 if ty.is_signed() {
                     signed_sub(fn_cx, &fn_name, &c_struct)
                 } else {
                     unsigned_sub(fn_cx, &fn_name, &c_struct)
                 }
             }
-            BinOpType::Mul => {
+            BinOpType::CheckedMul => {
                 if ty.is_signed() {
                     signed_mul(fn_cx, &fn_name, &c_struct)
                 } else {

@@ -4,7 +4,7 @@ use crate::expression::Expression;
 use crate::function::{CFunction, CodegenFunctionCx};
 use crate::header::handle_checked_op;
 use crate::utils;
-use rustc_middle::mir::{ConstOperand, ConstValue, Operand, Place, Rvalue, StatementKind};
+use rustc_middle::mir::{BinOp, ConstOperand, ConstValue, Operand, Place, Rvalue, StatementKind};
 use rustc_middle::ty::{ParamEnv, Ty};
 use std::fmt::{self, Debug};
 use tracing::{debug, debug_span, warn};
@@ -109,16 +109,13 @@ fn handle_assign<'tcx, 'ccx>(
         Rvalue::BinaryOp(op, operands) => {
             let lhs = handle_operand(fn_cx, &operands.0);
             let rhs = handle_operand(fn_cx, &operands.1);
-
-            Expression::BinaryOp { op: op.into(), lhs: Box::new(lhs), rhs: Box::new(rhs) }
-        }
-
-        Rvalue::CheckedBinaryOp(op, operands) => {
-            let lhs = handle_operand(fn_cx, &operands.0);
-            let rhs = handle_operand(fn_cx, &operands.1);
             let ty = operands.0.ty(&fn_cx.mir.local_decls, fn_cx.tcx);
-
-            handle_checked_op(fn_cx, op.into(), lhs, rhs, &ty)
+            match op {
+                BinOp::AddWithOverflow | BinOp::SubWithOverflow | BinOp::MulWithOverflow => {
+                    handle_checked_op(fn_cx, op.into(), lhs, rhs, &ty)
+                }
+                _ => Expression::BinaryOp { op: op.into(), lhs: Box::new(lhs), rhs: Box::new(rhs) },
+            }
         }
         Rvalue::Aggregate(kind, fields) => {
             // Return instantly because it already handles assignments.
