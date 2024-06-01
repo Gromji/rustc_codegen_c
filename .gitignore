@@ -1,3 +1,4 @@
 /target
 *.c
 .vscode
+tests/header_file.h

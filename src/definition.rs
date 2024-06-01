@@ -1,17 +1,22 @@
 use crate::crepr::Representable;
 use crate::crepr::RepresentationContext;
+use crate::expression::Expression;
 use crate::ty::CType;
 use std::fmt::{self, Debug};
 
 #[derive(Clone, PartialEq, Eq)]
 pub struct CVarDef {
+    local_id: usize,
     name: String,
     ty: CType,
 }
 
 impl CVarDef {
-    pub fn new(name: String, ty: CType) -> Self {
-        Self { name, ty }
+    pub fn new(local_id: usize, name: String, ty: CType) -> Self {
+        Self { local_id, name, ty }
+    }
+    pub fn get_id(&self) -> usize {
+        self.local_id
     }
     pub fn same_type(&self, other: &CVarDef) -> bool {
         self.ty == other.ty
@@ -19,21 +24,16 @@ impl CVarDef {
     pub fn get_name(&self) -> String {
         self.name.clone()
     }
+    pub fn get_type(&self) -> &CType {
+        &self.ty
+    }
 }
 
 impl Representable for CVarDef {
     fn repr(&self, f: &mut fmt::Formatter<'_>, _context: &RepresentationContext) -> fmt::Result {
-        self.ty.repr(
-            f,
-            &RepresentationContext {
-                indent: _context.indent,
-                indent_string: _context.indent_string.clone(),
-                include_newline: _context.include_newline,
-                include_comments: _context.include_comments,
-                var_name: Some(self.name.clone()),
-                ..Default::default()
-            },
-        )
+        let mut new_context = _context.clone();
+        new_context.var_name = Some(self.name.clone());
+        self.ty.repr(f, &new_context)
     }
 }
 
@@ -46,19 +46,25 @@ impl Debug for CVarDef {
 #[derive(Clone, PartialEq, Eq)]
 
 pub struct CVarDecl {
-    pub var: CVarDef,
-    pub value: Option<String>,
+    var: CVarDef,
+    value: Option<Box<Expression>>,
 }
 
 impl CVarDecl {
-    pub fn new(var: CVarDef, value: Option<String>) -> Self {
+    pub fn new(var: CVarDef, value: Option<Box<Expression>>) -> Self {
         Self { var, value }
+    }
+    pub fn get_var(&self) -> &CVarDef {
+        &self.var
     }
     pub fn get_var_type(&self) -> &CType {
         &self.var.ty
     }
     pub fn get_name(&self) -> String {
         self.var.get_name()
+    }
+    pub fn get_id(&self) -> usize {
+        self.var.local_id
     }
 }
 
@@ -67,7 +73,9 @@ impl Representable for CVarDecl {
         match &self.value {
             Some(value) => {
                 self.var.repr(f, _context)?;
-                write!(f, " = {};", value)
+                write!(f, " = ")?;
+                value.repr(f, _context)?;
+                write!(f, ";")
             }
             None => {
                 self.var.repr(f, _context)?;

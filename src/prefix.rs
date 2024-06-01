@@ -8,12 +8,15 @@ use crate::structure::CStruct;
 use crate::ty::CIntTy;
 use crate::ty::CType;
 
-use crate::crepr::Expression;
+use crate::expression::Expression;
 use crate::stmt::Statement;
+use crate::HEADER_FILE_NAME;
 
 pub fn build_prefix(context: &mut Context) {
     // Includes
     context.get_mut_includes().append(&mut prefix_includes());
+    // Header Includes
+    context.get_mut_header_includes().append(&mut prefix_header_includes());
     // Functions
     context.get_mut_functions().append(&mut prefix_functions());
     // Structs
@@ -21,7 +24,7 @@ pub fn build_prefix(context: &mut Context) {
 }
 
 // Greedy list of includes
-fn prefix_includes() -> Vec<Include> {
+fn prefix_header_includes() -> Vec<Include> {
     vec![
         Include::new("stdio.h".to_string(), true),
         Include::new("stdint.h".to_string(), true),
@@ -44,6 +47,9 @@ fn prefix_includes() -> Vec<Include> {
         Include::new("complex.h".to_string(), true),
     ]
 }
+fn prefix_includes() -> Vec<Include> {
+    vec![Include::new(HEADER_FILE_NAME.to_string(), false)]
+}
 
 // List of starter functions
 fn prefix_functions() -> Vec<CFunction> {
@@ -51,8 +57,9 @@ fn prefix_functions() -> Vec<CFunction> {
 
     let mut main = CFunction::new("main".to_string(), CType::Int(CIntTy::Int32));
 
-    main.add_signature_var(CVarDef::new("argc".to_string(), CType::Int(CIntTy::Int32)));
+    main.add_signature_var(CVarDef::new(0, "argc".to_string(), CType::Int(CIntTy::Int32)));
     main.add_signature_var(CVarDef::new(
+        1,
         "argv".to_string(),
         CType::Array(Box::new(CType::Pointer(Box::new(CType::Int(CIntTy::Int8)))), 0),
     ));

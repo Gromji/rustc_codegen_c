@@ -40,25 +40,27 @@ impl<'tcx> CodegenFunctionCx<'tcx, '_> {
 
 impl Representable for CFunction {
     fn repr(&self, f: &mut fmt::Formatter<'_>, context: &RepresentationContext) -> fmt::Result {
-        self.return_ty.repr(f, context)?;
+        let mut new_context = context.clone();
+        new_context.cur_fn = Some(&self);
+        self.return_ty.repr(f, &new_context)?;
         write!(f, " {}(", self.name)?;
         for (i, arg) in self.signature.iter().enumerate() {
             if i > 0 {
                 write!(f, ", ")?;
             }
-            arg.repr(f, context)?;
+            arg.repr(f, &new_context)?;
         }
         write!(f, ") ")?;
 
         write!(f, "{{\n")?;
         for decl in &self.local_decl {
-            indent(f, context)?;
-            decl.repr(f, context)?;
+            indent(f, &new_context)?;
+            decl.repr(f, &new_context)?;
             write!(f, "\n")?;
         }
 
         for (i, bb) in self.basic_blocks.iter().enumerate() {
-            bb.repr(f, context)?;
+            bb.repr(f, &new_context)?;
         }
 
         write!(f, "}}")
@@ -86,6 +88,10 @@ impl CFunction {
         self.name == "main"
     }
 
+    pub fn get_name(&self) -> &str {
+        &self.name
+    }
+
     pub fn push_bb(&mut self, bb: BasicBlock) {
         self.basic_blocks.push(bb);
     }
@@ -110,11 +116,21 @@ impl CFunction {
         self.local_decl.push(var);
     }
 
-    pub fn get_local_var(&self, idx: usize) -> &CVarDecl {
-        &self.local_decl[idx]
+    pub fn get_local_var(&self, idx: usize) -> &CVarDef {
+        for local_var in &self.local_decl {
+            if local_var.get_id() == idx {
+                return local_var.get_var();
+            }
+        }
+        for sig_var in &self.signature {
+            if sig_var.get_id() == idx {
+                return sig_var;
+            }
+        }
+        panic!("Local variable with id {} not found", idx);
     }
     pub fn get_local_var_name(&self, idx: usize) -> String {
-        self.local_decl[idx].get_name()
+        self.get_local_var(idx).get_name()
     }
 
     #[allow(dead_code)]
@@ -154,7 +170,7 @@ fn handle_decls<'tcx>(
         // add index to set
         set.insert(arg.index());
 
-        let c_var = CVarDef::new(name, rust_to_c_type(tcx, ongoing_codegen, &ty));
+        let c_var = CVarDef::new(arg.index(), name, rust_to_c_type(tcx, ongoing_codegen, &ty));
         c_fn.add_signature_var(c_var);
     });
 
@@ -168,7 +184,7 @@ fn handle_decls<'tcx>(
         let ty = decl.ty;
         let name = format!("var{}", idx);
         let c_ty = rust_to_c_type(tcx, ongoing_codegen, &ty);
-        let c_var = CVarDef::new(name, c_ty);
+        let c_var = CVarDef::new(idx, name, c_ty);
         c_fn.add_var_decl(CVarDecl::new(c_var, None));
     }
 }
@@ -187,8 +203,7 @@ pub fn handle_fn<'tcx>(
     inst: Instance<'tcx>,
 ) {
     let mir = tcx.instance_mir(inst.def);
-    let fn_cx =
-        CodegenFunctionCx { tcx: tcx, ongoing_codegen: ongoing_codegen, instance: inst, mir };
+    let mut fn_cx = CodegenFunctionCx { tcx, ongoing_codegen, instance: inst, mir };
 
     let mut c_fn = CFunction::new(
         format_fn_name(&tcx.symbol_name(inst)),
@@ -204,7 +219,7 @@ pub fn handle_fn<'tcx>(
     trace!("{:?}", c_fn);
 
     // Handle basic blocks
-    bb::handle_bbs(&fn_cx, &mut c_fn);
+    bb::handle_bbs(&mut fn_cx, &mut c_fn);
 
     // If is main prefix with "_"
     if c_fn.is_main() {

@@ -3,11 +3,25 @@
 #![allow(unused_variables)]
 fn main() {
     let _a = 1;
+    let k1: f32 = 10.0;
+    let k2: f32 = 20.0;
+    let k3 = k1 + k2;
+    let t1: i128 = 100;
+    let t2: i128 = 200;
+    let t3: i128 = t1 * t2;
+    let t4 = t2 - t1;
+    let i1 = 123;
+    let i2 = 321;
+    let i3 = i1 - i2;
+    let b1 = t1 < t2;
+    let b2 = k1 > k2;
+    let b3 = b1 && b2;
+    let b4 = b1 || b2;
 
     let a = test();
 
     let a = add_many(a);
-    
+
     if a > 0 {
         let b = 2;
     } else {
@@ -32,7 +46,7 @@ fn test() -> i32 {
     let p: Pair<i32, bool> = Pair { first: 128, second: true };
     let p2 = Pair { first: false, second: true };
     let k = 5;
-    let pair = (128, true);
+    let pair = (128, t);
     let unkonwn = (128, true, 1.0);
     let l: [i32; 3] = [1, 2, 3];
     let o = 0..1;
@@ -40,11 +54,10 @@ fn test() -> i32 {
     return 5;
 }
 
-
 fn add_many(x: i32) -> i32 {
     let mut b = x;
-    
-    while b < b*b {
+
+    while b < b * b {
         b += 3;
     }
 

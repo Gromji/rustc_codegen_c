@@ -1,8 +1,10 @@
 use crate::aggregate::handle_aggregate;
-use crate::crepr::{self, indent, Expression, Representable, RepresentationContext};
+use crate::crepr::{indent, Representable, RepresentationContext};
+use crate::expression::Expression;
 use crate::function::{CFunction, CodegenFunctionCx};
+use crate::header::handle_checked_op;
 use crate::utils;
-use rustc_middle::mir::{ConstOperand, ConstValue, Operand, Place, Rvalue, StatementKind};
+use rustc_middle::mir::{BinOp, ConstOperand, ConstValue, Operand, Place, Rvalue, StatementKind};
 use rustc_middle::ty::{ParamEnv, Ty};
 use std::fmt::{self, Debug};
 use tracing::{debug, debug_span, warn};
@@ -56,7 +58,7 @@ impl Debug for Statement {
 }
 
 pub fn handle_stmt<'tcx, 'ccx>(
-    fn_cx: &CodegenFunctionCx<'tcx, 'ccx>,
+    fn_cx: &mut CodegenFunctionCx<'tcx, 'ccx>,
     c_fn: &CFunction,
     stmt: &'tcx rustc_middle::mir::Statement<'tcx>,
 ) -> Statement {
@@ -68,7 +70,7 @@ pub fn handle_stmt<'tcx, 'ccx>(
     let expression = match &stmt.kind {
         StatementKind::Assign(val) => handle_assign(fn_cx, c_fn, &val.0, &val.1),
 
-        _ => crepr::Expression::NoOp {},
+        _ => Expression::NoOp {},
     };
 
     let statement = Statement::new(expression, format!("//{:?}", stmt).into());
@@ -81,7 +83,7 @@ pub fn handle_stmt<'tcx, 'ccx>(
 pub fn handle_operand<'tcx, 'ccx>(
     fn_cx: &CodegenFunctionCx<'tcx, 'ccx>,
     operand: &Operand<'tcx>,
-) -> crepr::Expression {
+) -> Expression {
     match operand {
         Operand::Copy(place) => Expression::Variable { local: place.local.as_usize(), idx: None },
         // move operations can be treated as a copy operation (I think)
@@ -92,11 +94,11 @@ pub fn handle_operand<'tcx, 'ccx>(
 }
 
 fn handle_assign<'tcx, 'ccx>(
-    fn_cx: &CodegenFunctionCx<'tcx, 'ccx>,
+    fn_cx: &mut CodegenFunctionCx<'tcx, 'ccx>,
     c_fn: &CFunction,
     place: &Place<'tcx>,
     rvalue: &'tcx Rvalue<'tcx>,
-) -> crepr::Expression {
+) -> Expression {
     let span = debug_span!("handle_assign").entered();
     debug!("place( {:?} )", place);
     debug!("rvalue( {:?} )", rvalue);
@@ -107,18 +109,12 @@ fn handle_assign<'tcx, 'ccx>(
         Rvalue::BinaryOp(op, operands) => {
             let lhs = handle_operand(fn_cx, &operands.0);
             let rhs = handle_operand(fn_cx, &operands.1);
-
-            crepr::Expression::BinaryOp { op: op.into(), lhs: Box::new(lhs), rhs: Box::new(rhs) }
-        }
-
-        Rvalue::CheckedBinaryOp(op, operands) => {
-            let lhs = handle_operand(fn_cx, &operands.0);
-            let rhs = handle_operand(fn_cx, &operands.1);
-
-            crepr::Expression::CheckedBinaryOp {
-                op: op.into(),
-                lhs: Box::new(lhs),
-                rhs: Box::new(rhs),
+            let ty = operands.0.ty(&fn_cx.mir.local_decls, fn_cx.tcx);
+            match op {
+                BinOp::AddWithOverflow | BinOp::SubWithOverflow | BinOp::MulWithOverflow => {
+                    handle_checked_op(fn_cx, op.into(), lhs, rhs, &ty)
+                }
+                _ => Expression::BinaryOp { op: op.into(), lhs: Box::new(lhs), rhs: Box::new(rhs) },
             }
         }
         Rvalue::Aggregate(kind, fields) => {
@@ -128,14 +124,14 @@ fn handle_assign<'tcx, 'ccx>(
 
         _ => {
             warn!("Unhandled rvalue: {:?}", rvalue);
-            crepr::Expression::NoOp {}
+            Expression::NoOp {}
         }
     };
 
     span.exit();
 
-    return crepr::Expression::Assignment {
-        lhs: Box::new(crepr::Expression::Variable { local: place.local.as_usize(), idx: None }),
+    return Expression::Assignment {
+        lhs: Box::new(Expression::Variable { local: place.local.as_usize(), idx: None }),
         rhs: Box::new(expression),
     };
 }

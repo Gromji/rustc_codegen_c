@@ -1,14 +1,32 @@
 use std::{fs::File, io::Write};
 
 use crate::function;
+use crate::header;
 use crate::include;
 use crate::structure;
 
 // Write includes to the file
-pub fn write_includes(includes: &Vec<include::Include>, file: &mut File) {
+pub fn write_includes(
+    includes: &Vec<include::Include>,
+    header_includes: &Vec<include::Include>,
+    file: &mut File,
+    header_file: &mut File,
+) {
     let includes = includes.iter().map(|i| format!("{:?}", i)).collect::<Vec<String>>();
+    let header_includes =
+        header_includes.iter().map(|i| format!("{:?}", i)).collect::<Vec<String>>();
 
     file.write_all(includes.join("\n").as_bytes()).unwrap();
+    header_file.write_all(header_includes.join("\n").as_bytes()).unwrap();
+}
+
+// Write Defines
+pub fn write_defines(defines: &Vec<header::CDefine>, file: &mut File) {
+    let defines = defines.iter().map(|d| format!("{:?}", d)).collect::<Vec<String>>();
+
+    // Write newline
+    file.write_all(b"\n\n").unwrap();
+    file.write_all(defines.join("\n").as_bytes()).unwrap();
 }
 
 // Write function prototypes
@@ -30,13 +48,13 @@ pub fn write_structs(structs: &Vec<structure::CStruct>, file: &mut File) {
 }
 
 // Write the functions to the file
-pub fn write_functions(functions: &Vec<function::CFunction>, file: &mut File) {
+pub fn write_functions(functions: &Vec<function::CFunction>, file: &mut File, is_header: bool) {
     let main_exists = functions.iter().any(|f| f.is_main());
 
     // Write newline
     file.write_all(b"\n\n").unwrap();
 
-    if !main_exists {
+    if !main_exists && !is_header {
         file.write_all(
             b"int main(int argc, char* argv[]) {\
             \n  return 0;\

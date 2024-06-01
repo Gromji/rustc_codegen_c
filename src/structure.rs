@@ -1,10 +1,9 @@
-use std::fmt::{self, Debug};
 use crate::{
     crepr::{indent, Representable},
     definition::CVarDef,
     ty::CType,
 };
-use rustc_middle::ty::{List, Ty};
+use std::fmt::{self, Debug};
 
 #[derive(Clone)]
 pub struct CStruct {
@@ -26,6 +25,9 @@ impl CStruct {
 
     pub fn get_name(&self) -> &String {
         &self.name
+    }
+    pub fn get_field(&self, idx: usize) -> &CVarDef {
+        &self.fields[idx]
     }
 
     #[allow(dead_code)]
@@ -60,28 +62,27 @@ impl Representable for CStruct {
         f: &mut std::fmt::Formatter<'_>,
         context: &crate::crepr::RepresentationContext,
     ) -> std::fmt::Result {
-        write!(f, "struct {} {{\n", self.name)?;
+        write!(f, "typedef struct {{\n")?;
         for field in &self.fields {
             indent(f, context)?;
             field.repr(f, context)?;
             write!(f, ";\n")?;
         }
-        write!(f, "}};")
+        write!(f, "}} {};", self.name)
     }
 }
 
-impl<'tcx> From<&List<Ty<'tcx>>> for CStruct {
+impl<'tcx> From<&Vec<CType>> for CStruct {
     // We can change the way we name tuples, for now all that matters is its unique.
-    fn from(list: &List<Ty>) -> Self {
+    fn from(list: &Vec<CType>) -> Self {
         let mut struct_name = String::from("s_");
         for ty in list {
             struct_name.push_str(&format!("{:?}", ty));
         }
-        // Change names instead of
         let fields = list
             .iter()
             .enumerate()
-            .map(|(idx, ty)| CVarDef::new(format!("field_{idx}"), CType::from(&ty)))
+            .map(|(idx, ty)| CVarDef::new(idx, format!("field_{idx}"), ty.clone()))
             .collect();
         Self::new(struct_name, Some(fields))
     }
