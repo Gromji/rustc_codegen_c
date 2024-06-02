@@ -1,13 +1,14 @@
 use crate::aggregate::handle_aggregate;
 use crate::crepr::{indent, Representable, RepresentationContext};
-use crate::expression::Expression;
+use crate::expression::{Expression, VariableAccess};
 use crate::function::{CFunction, CodegenFunctionCx};
 use crate::header::handle_checked_op;
+use crate::ty::CType;
 use crate::utils;
 use rustc_middle::mir::{BinOp, ConstOperand, ConstValue, Operand, Place, Rvalue, StatementKind};
 use rustc_middle::ty::{ParamEnv, Ty};
 use std::fmt::{self, Debug};
-use tracing::{debug, debug_span, warn};
+use tracing::{debug, debug_span, error, span, warn};
 
 #[derive(Clone, PartialEq, Eq)]
 pub struct Statement {
@@ -17,15 +18,24 @@ pub struct Statement {
 
 impl Statement {
     pub fn new(expression: Expression, comment: String) -> Self {
-        Self { expression: Some(expression), comment: (Some(comment)) }
+        Self {
+            expression: Some(expression),
+            comment: (Some(comment)),
+        }
     }
 
     pub fn from_expression(expression: Expression) -> Self {
-        Self { expression: Some(expression), comment: None }
+        Self {
+            expression: Some(expression),
+            comment: None,
+        }
     }
 
     pub fn from_comment(comment: String) -> Self {
-        Self { expression: None, comment: Some(comment) }
+        Self {
+            expression: None,
+            comment: Some(comment),
+        }
     }
 }
 
@@ -80,15 +90,81 @@ pub fn handle_stmt<'tcx, 'ccx>(
     return statement;
 }
 
+pub fn handle_place<'tcx, 'ccx>(
+    fn_cx: &CodegenFunctionCx<'tcx, 'ccx>,
+    place: &Place<'tcx>,
+) -> Expression {
+    // if the projection is empty, we can just return the variable
+    let _span = span!(tracing::Level::DEBUG, "handle_place").entered();
+    debug!("place: {:?}, projections {:?}", place, place.projection);
+
+    let mut access = Vec::new();
+
+    let mut current_ty = fn_cx.ty_for_local(place.local);
+
+    for proj in place.projection {
+        match proj {
+            rustc_middle::mir::ProjectionElem::Field(field, ty) => {
+                let ctype = fn_cx
+                    .ctype_from_cache(&current_ty)
+                    .expect("No ctype found in cache for rust type"); // I don't expect this to happen since any variable accessed at this point should already be in the cache. Hopefully I won't be proven wrong
+
+                debug!("Field: {:?}, Type: {:?}, current_ty: {:?}, next_ty: {:?}", field, ctype, current_ty, ty);
+
+                current_ty = ty;
+
+                match ctype {
+                    CType::Struct(struct_info) => {
+                        access.push(VariableAccess::Field {
+                            name: fn_cx
+                                .ongoing_codegen
+                                .context
+                                .get_field_name_for_struct(&struct_info.name, field.as_usize())
+                                .unwrap(),
+                        });
+                    }
+                    _ => {
+                        error!("Expected struct type, got {:?}", ctype);
+                    }
+                }
+            }
+            rustc_middle::mir::ProjectionElem::Index(idx_local) => {
+                access.push(VariableAccess::Index {
+                    idx: idx_local.as_usize(),
+                })
+            }
+            rustc_middle::mir::ProjectionElem::ConstantIndex { offset, .. } => {
+                access.push(VariableAccess::Index {
+                    idx: offset as usize,
+                })
+            }
+            rustc_middle::mir::ProjectionElem::Subslice { .. } => {
+                todo!("Subslice")
+            }
+            rustc_middle::mir::ProjectionElem::Downcast(_, _) => {
+                todo!("Downcast")
+            }
+
+            rustc_middle::mir::ProjectionElem::Deref => access.push(VariableAccess::Dereference),
+            
+            _ => {}
+        }
+    }
+
+    return Expression::Variable {
+        local: place.local.as_usize(),
+        access,
+    };
+}
+
 pub fn handle_operand<'tcx, 'ccx>(
     fn_cx: &CodegenFunctionCx<'tcx, 'ccx>,
     operand: &Operand<'tcx>,
 ) -> Expression {
     match operand {
-        Operand::Copy(place) => Expression::Variable { local: place.local.as_usize(), idx: None },
+        Operand::Copy(place) => handle_place(fn_cx, place),
         // move operations can be treated as a copy operation (I think)
-        Operand::Move(place) => Expression::Variable { local: place.local.as_usize(), idx: None },
-
+        Operand::Move(place) => handle_place(fn_cx, place),
         Operand::Constant(constant) => handle_constant(fn_cx, constant),
     }
 }
@@ -114,7 +190,11 @@ fn handle_assign<'tcx, 'ccx>(
                 BinOp::AddWithOverflow | BinOp::SubWithOverflow | BinOp::MulWithOverflow => {
                     handle_checked_op(fn_cx, op.into(), lhs, rhs, &ty)
                 }
-                _ => Expression::BinaryOp { op: op.into(), lhs: Box::new(lhs), rhs: Box::new(rhs) },
+                _ => Expression::BinaryOp {
+                    op: op.into(),
+                    lhs: Box::new(lhs),
+                    rhs: Box::new(rhs),
+                },
             }
         }
         Rvalue::Aggregate(kind, fields) => {
@@ -131,7 +211,7 @@ fn handle_assign<'tcx, 'ccx>(
     span.exit();
 
     return Expression::Assignment {
-        lhs: Box::new(Expression::Variable { local: place.local.as_usize(), idx: None }),
+        lhs: Box::new(handle_place(fn_cx, place)),
         rhs: Box::new(expression),
     };
 }
@@ -164,7 +244,9 @@ fn handle_const_value<'tcx>(val: &ConstValue, ty: &Ty) -> Expression {
 
         rustc_middle::mir::ConstValue::ZeroSized => {
             debug!("Zerosized kind {:?}, val {:?}", ty.kind(), ty);
-            return Expression::Constant { value: ty.to_string() };
+            return Expression::Constant {
+                value: ty.to_string(),
+            };
         }
         _ => {
             warn!("Unhandled constant: {:?}", val);

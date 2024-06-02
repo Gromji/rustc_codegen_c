@@ -41,8 +41,9 @@ struct Pair<T, U> {
 }
 
 fn test() -> i32 {
-    let t: Te;
+    let mut t: Te;
     t = Te { a: 7, b: 8, pair: Pair { first: 128, second: true } };
+    t.pair.first = 10;
     let p: Pair<i32, bool> = Pair { first: 128, second: true };
     let p2 = Pair { first: false, second: true };
     let k = 5;
