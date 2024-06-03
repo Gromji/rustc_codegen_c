@@ -40,6 +40,7 @@ impl BasicBlock {
         Self { bb_id, statements: Vec::new() }
     }
 
+    #[allow(dead_code)]
     pub fn is_empty(&self) -> bool {
         self.statements.is_empty()
     }
@@ -48,6 +49,7 @@ impl BasicBlock {
         self.statements.push(stmt);
     }
 
+    #[allow(dead_code)]
     pub fn clear(&mut self) {
         self.statements.clear();
     }
@@ -94,6 +96,10 @@ fn handle_function_call<'tcx, 'ccx>(
     args: Vec<Spanned<Operand<'tcx>>>,
     destination: rustc_middle::mir::Place<'tcx>,
 ) -> Statement {
+    
+    let _span = debug_span!("handle_function_call").entered();
+    debug!("Function call: {:?}, args {:?}", func, args);
+
     let destination = handle_place(fn_cx, &destination);
 
     match func {
@@ -154,7 +160,7 @@ fn handle_function_call<'tcx, 'ccx>(
 pub fn handle_terminator<'tcx, 'ccx>(
     fn_cx: &CodegenFunctionCx<'tcx, 'ccx>,
     terminator: &rustc_middle::mir::Terminator<'tcx>,
-    bb_id: &BasicBlockIdentifier,
+    _bb_id: &BasicBlockIdentifier,
 ) -> Vec<Statement> {
     let _span = debug_span!("handle_terminator").entered();
 
@@ -214,7 +220,7 @@ pub fn handle_terminator<'tcx, 'ccx>(
             return vec![stmt];
         }
 
-        TerminatorKind::FalseEdge { real_target, imaginary_target } => {
+        TerminatorKind::FalseEdge { real_target, .. } => {
             // imaginary target can't be reached, so we can ignore it
             let stmt = Statement::from_expression(Expression::Goto {
                 target: BasicBlockIdentifier(real_target.as_usize()),
@@ -223,7 +229,7 @@ pub fn handle_terminator<'tcx, 'ccx>(
             return vec![stmt];
         }
 
-        TerminatorKind::FalseUnwind { real_target, unwind } => {
+        TerminatorKind::FalseUnwind { real_target, ..} => {
             // unwind can be ignored
             let stmt = Statement::from_expression(Expression::Goto {
                 target: BasicBlockIdentifier(real_target.as_usize()),
@@ -232,7 +238,7 @@ pub fn handle_terminator<'tcx, 'ccx>(
             return vec![stmt];
         }
 
-        TerminatorKind::Assert { cond, expected, msg, target, unwind } => {
+        TerminatorKind::Assert { cond, expected, msg: _,  target, .. } => {
             /*  TODO we could ignore asserts, implement them with the assert define or allow the user to provide custom implementations to handle them.
                 I personally think the latter would be best and would allow us to side-step other similar issues.
                 We would have a default implementation that would use the assert macro, but the user could provide their own implementation.

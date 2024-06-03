@@ -145,7 +145,10 @@ pub fn handle_place<'tcx, 'ccx>(
                 todo!("Downcast")
             }
 
-            rustc_middle::mir::ProjectionElem::Deref => access.push(VariableAccess::Dereference),
+            rustc_middle::mir::ProjectionElem::Deref => {
+                current_ty = current_ty.builtin_deref(true).unwrap();
+                access.push(VariableAccess::Dereference);
+            }
             
             _ => {}
         }
@@ -180,9 +183,13 @@ fn handle_assign<'tcx, 'ccx>(
     debug!("rvalue( {:?} )", rvalue);
 
     let expression = match rvalue {
-        Rvalue::Use(operand) => handle_operand(fn_cx, operand),
+        Rvalue::Use(operand) => {
+            debug!("Assign USE: {:?}", operand);
+            handle_operand(fn_cx, operand) 
+        }
 
         Rvalue::BinaryOp(op, operands) => {
+            debug!("Assign BINARY OP: {:?}", op);
             let lhs = handle_operand(fn_cx, &operands.0);
             let rhs = handle_operand(fn_cx, &operands.1);
             let ty = operands.0.ty(&fn_cx.mir.local_decls, fn_cx.tcx);
@@ -197,9 +204,31 @@ fn handle_assign<'tcx, 'ccx>(
                 },
             }
         }
-        Rvalue::Aggregate(kind, fields) => {
+        Rvalue::Aggregate(kind, fields  ) => {
+            debug!("Assign AGGREGATE: {:?}", kind);
             // Return instantly because it already handles assignments.
-            return handle_aggregate(fn_cx, c_fn, place, kind, fields.iter());
+            return handle_aggregate(fn_cx, c_fn, place, kind, fields);
+        }
+
+        Rvalue::Ref(_region, _kind, place) => {
+            debug!("Assign REF: {:?}", place);
+            let place = handle_place(fn_cx, place);
+            if let Expression::Variable { local, access } = place {
+                let mut new_access = access.clone();
+                new_access.push(VariableAccess::Reference);
+                Expression::Variable {
+                    local,
+                    access: new_access,
+                }
+            } else {
+                panic!("Expected place to be a variable");                
+            }
+        }
+
+        Rvalue::CopyForDeref(place) => {
+            debug!("Assign COPY FOR DEREF: {:?}", place);
+
+            handle_place(fn_cx, place)
         }
 
         _ => {
@@ -233,7 +262,7 @@ pub fn handle_constant<'tcx, 'ccx>(
 fn handle_const_value<'tcx>(val: &ConstValue, ty: &Ty) -> Expression {
     match val {
         rustc_middle::mir::ConstValue::Scalar(scalar) => match scalar {
-            rustc_const_eval::interpret::Scalar::Int(i) => {
+            rustc_const_eval::interpret::Scalar::Int(_i) => {
                 return Expression::Constant {
                     value: format!("{}", utils::scalar_to_u128(&scalar)),
                 }; // todo handle this better

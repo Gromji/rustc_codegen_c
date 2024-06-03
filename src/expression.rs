@@ -295,7 +295,7 @@ impl Representable for Expression {
                         }
                         
                         VariableAccess::Dereference => {
-                            var_repr = format!("*{}", var_repr);
+                            var_repr = format!("(*{})", var_repr);
                         }
 
                         VariableAccess::Field { name } => {
