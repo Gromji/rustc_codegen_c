@@ -3,12 +3,13 @@
 #![allow(unused_variables)]
 fn main() {
     let _a = 1;
-    let k1: f32 = 10.0;
+    let k1: f32 = 10.1;
     let k2: f32 = 20.0;
     let k3 = k1 + k2;
     let t1: i128 = 100;
     let t2: i128 = 200;
     let t3: i128 = t1 * t2;
+    let b1: bool = false;
     let t4 = t2 - t1;
     let i1 = 123;
     let i2 = 321;
@@ -16,7 +17,7 @@ fn main() {
     let b1 = t1 < t2;
     let b2 = k1 > k2;
     let b3 = b1 && b2;
-    let b4 = b1 || b2;
+    let b4 = b1 || b1 || b2;
 
     let a = test();
 

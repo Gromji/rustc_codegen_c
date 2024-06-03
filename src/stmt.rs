@@ -260,12 +260,42 @@ pub fn handle_constant<'tcx, 'ccx>(
 }
 
 fn handle_const_value<'tcx>(val: &ConstValue, ty: &Ty) -> Expression {
+
+    let _span = span!(tracing::Level::DEBUG, "handle_const_value").entered();
+    debug!("Const value: {:?}, with type: {:?}", val, ty);
+
     match val {
         rustc_middle::mir::ConstValue::Scalar(scalar) => match scalar {
             rustc_const_eval::interpret::Scalar::Int(_i) => {
-                return Expression::Constant {
-                    value: format!("{}", utils::scalar_to_u128(&scalar)),
-                }; // todo handle this better
+                
+                match ty.kind() {
+                    rustc_middle::ty::TyKind::Int(_) => {
+                        return Expression::Constant {
+                            value: format!("{}", utils::scalar_to_u128(&scalar)),
+                        };
+                    }
+                    rustc_middle::ty::TyKind::Uint(_) => {
+                        return Expression::Constant {
+                            value: format!("{}u", utils::scalar_to_u128(&scalar)),
+                        };
+                    }
+                    rustc_middle::ty::TyKind::Float(_) => {
+                        return Expression::Constant {
+                            value: format!("{}", utils::scalar_to_float(&scalar)),
+                        };
+                    }
+
+                    rustc_middle::ty::TyKind::Bool => {
+                        return Expression::Constant {
+                            value: format!("{}", scalar.to_bool().unwrap()),
+                        };
+                    }
+
+                    _ => {
+                        warn!("Unhandled scalar kind: {:?}", ty.kind());
+                        return Expression::NoOp {};
+                    }
+                }
             }
 
             rustc_const_eval::interpret::Scalar::Ptr(_, _) => todo!("Ptr"),
