@@ -316,6 +316,7 @@ impl CStructInfo {
     }
 }
 /// Used to convert Rust types to C types. This function also handles [generic] struct creation.
+/// Should not be used directly, use the CodegenFunctionCx::rust_to_c_type instead.
 pub fn rust_to_c_type<'tcx>(
     tcx: rustc_middle::ty::TyCtxt<'tcx>,
     ongoing_codegen: &mut OngoingCodegen,

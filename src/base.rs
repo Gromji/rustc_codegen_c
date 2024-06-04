@@ -120,6 +120,16 @@ impl Context {
         return cur_struct;
     }
 
+    pub fn get_field_name_for_struct(&self, struct_name: &str, idx: usize) -> Option<String> {
+        for s in self.get_structs() {
+            if s.get_name() == struct_name {
+                return Some(s.get_field(idx).get_name().clone());
+            }
+        }
+        
+        return None;
+    }
+
     pub fn has_struct_with_name(&self, name: &str) -> bool {
         for s in self.get_structs() {
             if s.get_name() == name {
@@ -168,9 +178,9 @@ impl OngoingCodegen {
 
         write::write_defines(ongoing_codegen.context.get_defines(), &mut header_file);
 
-        write::write_prototypes(ongoing_codegen.context.get_functions(), &mut header_file);
-
         write::write_structs(ongoing_codegen.context.get_structs(), &mut header_file);
+        
+        write::write_prototypes(ongoing_codegen.context.get_functions(), &mut header_file);
 
         write::write_functions(ongoing_codegen.context.get_functions(), &mut file, false);
 

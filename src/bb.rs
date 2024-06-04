@@ -3,7 +3,7 @@ use std::fmt::{self, Debug};
 use crate::crepr::{indent, Representable};
 use crate::expression::{Expression, UnaryOpType};
 use crate::function::{format_fn_name, CFunction, CodegenFunctionCx};
-use crate::stmt::{handle_operand, handle_stmt, Statement};
+use crate::stmt::{handle_operand, handle_place, handle_stmt, Statement};
 use rustc_middle::mir::BasicBlockData;
 use rustc_middle::mir::Operand;
 use rustc_middle::mir::TerminatorKind;
@@ -94,7 +94,7 @@ fn handle_function_call<'tcx, 'ccx>(
     args: Vec<Spanned<Operand<'tcx>>>,
     destination: rustc_middle::mir::Place<'tcx>,
 ) -> Statement {
-    let destination = Expression::Variable { local: destination.local.as_usize(), idx: None }; // TODO this is probably wrong, we should handle places properly    
+    let destination = handle_place(fn_cx, &destination);
 
     match func {
         Operand::Constant(ref constant) => {
@@ -183,7 +183,7 @@ pub fn handle_terminator<'tcx, 'ccx>(
 
         TerminatorKind::Return => {
             let stmt = Statement::from_expression(Expression::Return {
-                value: Box::new(Expression::Variable { local: 0, idx: None }), // hardcoded 0 value, since return values are always index 0
+                value: Expression::vari(0) // hardcoded 0 value, since return values are always index 0
             });
 
             return vec![stmt];

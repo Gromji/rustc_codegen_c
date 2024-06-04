@@ -1,6 +1,6 @@
 use crate::{
     bb::BasicBlockIdentifier,
-    crepr::{indent, Representable, RepresentationContext},
+    crepr::{indent, Representable, RepresentationContext}, ty::CType,
 };
 use std::{
     fmt,
@@ -134,8 +134,19 @@ impl Representable for UnaryOpType {
     }
 }
 
-pub struct Constant {
-    pub value: String, // TODO this is a copout, we should have a proper representation for constants
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum VariableAccess {
+    Reference,
+    Dereference,
+    Field {
+        name: String,
+    },
+    Index {
+        idx: usize,
+    },
+    Cast {
+        ty: CType,
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -145,7 +156,7 @@ pub enum Expression {
     },
     Variable {
         local: usize,
-        idx: Option<usize>,
+        access: Vec<VariableAccess>,
     }, // TODO this might not be an appropriate representation, especially if we plan to add debug info into the mix
     Assignment {
         lhs: Box<Expression>,
@@ -204,11 +215,14 @@ impl Expression {
     pub fn constant(value: &String) -> Box<Expression> {
         Box::new(Expression::Constant { value: value.clone() })
     }
-    pub fn vari(local: usize, idx: Option<usize>) -> Box<Expression> {
-        Box::new(Expression::unbvari(local, idx))
+    pub fn arr_vari(local: usize, idx: usize) -> Box<Expression> {
+        Box::new(Expression::Variable { local, access: vec![VariableAccess::Index { idx }] })
     }
-    pub fn unbvari(local: usize, idx: Option<usize>) -> Expression {
-        Expression::Variable { local, idx }
+    pub fn vari(local: usize) -> Box<Expression> {
+        Box::new(Expression::unbvari(local))
+    }
+    pub fn unbvari(local: usize) -> Expression {
+        Expression::Variable { local, access: Vec::new() }
     }
     pub fn strct(name: Box<Expression>, fields: Vec<Expression>) -> Box<Expression> {
         Box::new(Expression::Struct { name, fields })
@@ -264,19 +278,42 @@ impl Representable for Expression {
                 write!(f, "{}", value)
             }
 
-            Expression::Variable { local, idx } => {
-                let name = match context.cur_fn {
-                    Some(cur_fn) => cur_fn.get_local_var_name(*local),
-                    None => format!("var{}", local), // This should never be the case.
-                };
-                match idx {
-                    Some(idx) => {
-                        write!(f, "{}[{}]", name, idx)
-                    }
-                    None => {
-                        write!(f, "{}", name)
+            Expression::Variable { local, access} => {
+                
+                if context.cur_fn.is_none() {
+                    panic!("No current function set in context");
+                }
+                
+                let var = context.cur_fn.unwrap().get_local_var(*local);
+                
+                let mut var_repr = var.get_name();
+                
+                for access in access {
+                    match access {
+                        VariableAccess::Reference => {
+                            var_repr = format!("&{}", var_repr);
+                        }
+                        
+                        VariableAccess::Dereference => {
+                            var_repr = format!("*{}", var_repr);
+                        }
+
+                        VariableAccess::Field { name } => {
+                            var_repr = format!{"{}.{}", var_repr, name};
+                        }
+                        
+                        VariableAccess::Index { idx } => {
+                            var_repr = format!{"{}[{}]", var_repr, idx};
+                        }
+                        
+                        VariableAccess::Cast { ty } => {
+                            // the :? is a bit of a hack, but it should work for now
+                            var_repr = format!("(({:?}){})", ty, var_repr);
+                        }
                     }
                 }
+
+                write!(f, "{}", var_repr)
             }
 
             Expression::Assignment { lhs, rhs } => {
@@ -365,7 +402,7 @@ impl Representable for Expression {
                     }
                 }
 
-                indent(f, context);
+                indent(f, context)?;
                 write!(f, "default: goto ")?;
                 default.repr(f, context)?;
                 write!(f, ";")?;
@@ -374,7 +411,7 @@ impl Representable for Expression {
                     write!(f, "\n")?;
                 }
 
-                indent(f, context);
+                indent(f, context)?;
                 write!(f, "}}")?;
                 Ok(())
             }

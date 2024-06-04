@@ -11,7 +11,7 @@ use crate::{
     ty::{rust_to_c_type, CStructInfo, CType},
 };
 use rustc_middle::ty::Ty;
-use tracing::{debug_span, warn};
+use tracing::{debug_span, debug};
 
 // We will need to change structure of CDefine for more versitile use
 pub struct CDefine {
@@ -55,7 +55,7 @@ pub fn handle_checked_op<'tcx, 'ccx>(
     let fields = vec![rust_to_c_type(fn_cx.tcx, fn_cx.ongoing_codegen, ty), CType::Bool];
     let c_struct = fn_cx.ongoing_codegen.context.get_struct(&fields);
     if !fn_cx.ongoing_codegen.context.exists_header_fn_with_name(fn_name.as_str()) {
-        warn!("Function for {fn_name} not found, creating one!");
+        debug!("Function for {fn_name} not found, creating one!");
         let checked_op = match op {
             BinOpType::CheckedAdd => {
                 if ty.is_signed() {
@@ -157,30 +157,30 @@ fn signed_add<'tcx, 'ccx>(
     c_fn.add_signature_var(CVarDef::new(1, "second".to_string(), sum_type.clone()));
     c_fn.add_var_decl(CVarDecl::new(
         CVarDef::new(2, "sum".to_string(), sum_type.clone()),
-        Some(Expression::vari(0, None) + Expression::vari(1, None)),
+        Some(Expression::vari(0) + Expression::vari(1)),
     ));
     // (second > 0 && first > INT{bit_width}_MAX - second)
     c_fn.add_var_decl(CVarDecl::new(
         CVarDef::new(3, "overflow_a".to_string(), CType::Bool),
         Some(
-            Expression::vari(1, None).gt(Expression::constant(&"0".to_string()))
-                & Expression::vari(0, None)
-                    .gt(Expression::constant(&max_int_str) - Expression::vari(1, None)),
+            Expression::vari(1).gt(Expression::constant(&"0".to_string()))
+                & Expression::vari(0)
+                    .gt(Expression::constant(&max_int_str) - Expression::vari(1)),
         ),
     ));
     // (second < 0 && first < INT{bit_width}_MIN - second)
     c_fn.add_var_decl(CVarDecl::new(
         CVarDef::new(4, "overflow_b".to_string(), CType::Bool),
         Some(
-            Expression::vari(1, None).lt(Expression::constant(&"0".to_string()))
-                & Expression::vari(0, None)
-                    .lt(Expression::constant(&min_int_str) - Expression::vari(1, None)),
+            Expression::vari(1).lt(Expression::constant(&"0".to_string()))
+                & Expression::vari(0)
+                    .lt(Expression::constant(&min_int_str) - Expression::vari(1)),
         ),
     ));
     // (second > 0 && first > INT{bit_width}_MAX - second) | (second < 0 && first < INT{bit_width}_MIN - second)
     c_fn.add_var_decl(CVarDecl::new(
         CVarDef::new(5, "overflow".to_string(), CType::Bool),
-        Some(Expression::vari(3, None) | Expression::vari(4, None)),
+        Some(Expression::vari(3) | Expression::vari(4)),
     ));
 
     let mut bb = BasicBlock::new(BasicBlockIdentifier(0));
@@ -188,7 +188,7 @@ fn signed_add<'tcx, 'ccx>(
     bb.push(Statement::from_expression(Expression::Return {
         value: Expression::strct(
             Expression::constant(c_struct.get_name()),
-            vec![Expression::unbvari(2, None), Expression::unbvari(5, None)],
+            vec![Expression::unbvari(2), Expression::unbvari(5)],
         ),
     }));
     c_fn.push_bb(bb);
@@ -208,11 +208,11 @@ fn unsigned_add<'tcx, 'ccx>(
     c_fn.add_signature_var(CVarDef::new(1, "second".to_string(), sum_type.clone()));
     c_fn.add_var_decl(CVarDecl::new(
         CVarDef::new(2, "sum".to_string(), sum_type.clone()),
-        Some(Expression::vari(0, None) + Expression::vari(1, None)),
+        Some(Expression::vari(0) + Expression::vari(1)),
     ));
     c_fn.add_var_decl(CVarDecl::new(
         CVarDef::new(3, "overflow".to_string(), CType::Bool),
-        Some(Expression::vari(2, None).lt(Expression::vari(0, None))),
+        Some(Expression::vari(2).lt(Expression::vari(0))),
     ));
 
     let mut bb = BasicBlock::new(BasicBlockIdentifier(0));
@@ -220,7 +220,7 @@ fn unsigned_add<'tcx, 'ccx>(
     bb.push(Statement::from_expression(Expression::Return {
         value: Expression::strct(
             Expression::constant(c_struct.get_name()),
-            vec![Expression::unbvari(2, None), Expression::unbvari(3, None)],
+            vec![Expression::unbvari(2), Expression::unbvari(3)],
         ),
     }));
     c_fn.push_bb(bb);
@@ -240,37 +240,37 @@ fn signed_sub<'tcx, 'ccx>(
     c_fn.add_signature_var(CVarDef::new(1, "second".to_string(), difference_type.clone()));
     c_fn.add_var_decl(CVarDecl::new(
         CVarDef::new(2, "difference".to_string(), difference_type.clone()),
-        Some(Expression::vari(0, None) - Expression::vari(1, None)),
+        Some(Expression::vari(0) - Expression::vari(1)),
     ));
     //second > 0 && first < INT{bit_width}_MIN + second
     c_fn.add_var_decl(CVarDecl::new(
         CVarDef::new(3, "overflow_a".to_string(), CType::Bool),
         Some(
-            Expression::vari(1, None).gt(Expression::constant(&"0".to_string()))
-                & Expression::vari(0, None)
-                    .lt(Expression::constant(&min_int_str) + Expression::vari(1, None)),
+            Expression::vari(1).gt(Expression::constant(&"0".to_string()))
+                & Expression::vari(0)
+                    .lt(Expression::constant(&min_int_str) + Expression::vari(1)),
         ),
     ));
     // second < 0 && first > INT{bit_width}_MAX + second
     c_fn.add_var_decl(CVarDecl::new(
         CVarDef::new(4, "overflow_b".to_string(), CType::Bool),
         Some(
-            Expression::vari(1, None).lt(Expression::constant(&"0".to_string()))
-                & Expression::vari(0, None)
-                    .gt(Expression::constant(&max_int_str) + Expression::vari(1, None)),
+            Expression::vari(1).lt(Expression::constant(&"0".to_string()))
+                & Expression::vari(0)
+                    .gt(Expression::constant(&max_int_str) + Expression::vari(1)),
         ),
     ));
     //((second > 0 && first < INT{bit_width}_MIN + second) || (second < 0 && first > INT{bit_width}_MAX + second))
     c_fn.add_var_decl(CVarDecl::new(
         CVarDef::new(5, "overflow".to_string(), CType::Bool),
-        Some(Expression::vari(3, None) | Expression::vari(4, None)),
+        Some(Expression::vari(3) | Expression::vari(4)),
     ));
 
     let mut bb = BasicBlock::new(BasicBlockIdentifier(0));
     bb.push(Statement::from_expression(Expression::Return {
         value: Expression::strct(
             Expression::constant(c_struct.get_name()),
-            vec![Expression::unbvari(2, None), Expression::unbvari(5, None)],
+            vec![Expression::unbvari(2), Expression::unbvari(5)],
         ),
     }));
     c_fn.push_bb(bb);
@@ -290,11 +290,11 @@ fn unsigned_sub<'tcx, 'ccx>(
     c_fn.add_signature_var(CVarDef::new(1, "second".to_string(), difference_type.clone()));
     c_fn.add_var_decl(CVarDecl::new(
         CVarDef::new(2, "difference".to_string(), difference_type.clone()),
-        Some(Expression::vari(0, None) - Expression::vari(1, None)),
+        Some(Expression::vari(0) - Expression::vari(1)),
     ));
     c_fn.add_var_decl(CVarDecl::new(
         CVarDef::new(3, "underflow".to_string(), CType::Bool),
-        Some(Expression::vari(0, None).lt(Expression::vari(1, None))),
+        Some(Expression::vari(0).lt(Expression::vari(1))),
     ));
 
     let mut bb = BasicBlock::new(BasicBlockIdentifier(0));
@@ -302,7 +302,7 @@ fn unsigned_sub<'tcx, 'ccx>(
     bb.push(Statement::from_expression(Expression::Return {
         value: Expression::strct(
             Expression::constant(c_struct.get_name()),
-            vec![Expression::unbvari(2, None), Expression::unbvari(3, None)],
+            vec![Expression::unbvari(2), Expression::unbvari(3)],
         ),
     }));
     c_fn.push_bb(bb);
@@ -323,73 +323,73 @@ fn signed_mul<'tcx, 'ccx>(
     c_fn.add_signature_var(CVarDef::new(1, "second".to_string(), product_type.clone()));
     c_fn.add_var_decl(CVarDecl::new(
         CVarDef::new(2, "product".to_string(), product_type.clone()),
-        Some(Expression::vari(0, None) * Expression::vari(1, None)),
+        Some(Expression::vari(0) * Expression::vari(1)),
     ));
     // (a == -1 && b == INT{}_MIN)
     c_fn.add_var_decl(CVarDecl::new(
         CVarDef::new(3, "overflow_a".to_string(), CType::Bool),
         Some(
-            Expression::vari(0, None).equ(Expression::constant(&"-1".to_string()))
-                & Expression::vari(1, None).equ(Expression::constant(&min_int_str)),
+            Expression::vari(0).equ(Expression::constant(&"-1".to_string()))
+                & Expression::vari(1).equ(Expression::constant(&min_int_str)),
         ),
     ));
     // (b == -1 && a == INT{}_MIN)
     c_fn.add_var_decl(CVarDecl::new(
         CVarDef::new(4, "overflow_b".to_string(), CType::Bool),
         Some(
-            Expression::vari(1, None).equ(Expression::constant(&"-1".to_string()))
-                & Expression::vari(0, None).equ(Expression::constant(&min_int_str)),
+            Expression::vari(1).equ(Expression::constant(&"-1".to_string()))
+                & Expression::vari(0).equ(Expression::constant(&min_int_str)),
         ),
     ));
     // (a > 0 && b > 0 && a > INT{}_MAX / b)
     c_fn.add_var_decl(CVarDecl::new(
         CVarDef::new(5, "overflow_c".to_string(), CType::Bool),
         Some(
-            Expression::vari(0, None).gt(Expression::constant(&"0".to_string()))
-                & Expression::vari(1, None).gt(Expression::constant(&"0".to_string()))
-                & Expression::vari(0, None)
-                    .gt(Expression::constant(&max_int_str) / Expression::vari(1, None)),
+            Expression::vari(0).gt(Expression::constant(&"0".to_string()))
+                & Expression::vari(1).gt(Expression::constant(&"0".to_string()))
+                & Expression::vari(0)
+                    .gt(Expression::constant(&max_int_str) / Expression::vari(1)),
         ),
     ));
     // (a > 0 && b < 0 && b < INT{}_MIN / a)
     c_fn.add_var_decl(CVarDecl::new(
         CVarDef::new(6, "overflow_d".to_string(), CType::Bool),
         Some(
-            Expression::vari(0, None).gt(Expression::constant(&"0".to_string()))
-                & Expression::vari(1, None).lt(Expression::constant(&"0".to_string()))
-                & Expression::vari(1, None)
-                    .lt(Expression::constant(&min_int_str) / Expression::vari(0, None)),
+            Expression::vari(0).gt(Expression::constant(&"0".to_string()))
+                & Expression::vari(1).lt(Expression::constant(&"0".to_string()))
+                & Expression::vari(1)
+                    .lt(Expression::constant(&min_int_str) / Expression::vari(0)),
         ),
     ));
     // (a < 0 && b > 0 && a < INT{}_MIN / b)
     c_fn.add_var_decl(CVarDecl::new(
         CVarDef::new(7, "overflow_e".to_string(), CType::Bool),
         Some(
-            Expression::vari(0, None).lt(Expression::constant(&"0".to_string()))
-                & Expression::vari(1, None).gt(Expression::constant(&"0".to_string()))
-                & Expression::vari(0, None)
-                    .lt(Expression::constant(&min_int_str) / Expression::vari(1, None)),
+            Expression::vari(0).lt(Expression::constant(&"0".to_string()))
+                & Expression::vari(1).gt(Expression::constant(&"0".to_string()))
+                & Expression::vari(0)
+                    .lt(Expression::constant(&min_int_str) / Expression::vari(1)),
         ),
     ));
     // (a < 0 && b < 0 && a < INT{}_MAX / b)
     c_fn.add_var_decl(CVarDecl::new(
         CVarDef::new(8, "overflow_f".to_string(), CType::Bool),
         Some(
-            Expression::vari(0, None).lt(Expression::constant(&"0".to_string()))
-                & Expression::vari(1, None).lt(Expression::constant(&"0".to_string()))
-                & Expression::vari(0, None)
-                    .lt(Expression::constant(&max_int_str) / Expression::vari(1, None)),
+            Expression::vari(0).lt(Expression::constant(&"0".to_string()))
+                & Expression::vari(1).lt(Expression::constant(&"0".to_string()))
+                & Expression::vari(0)
+                    .lt(Expression::constant(&max_int_str) / Expression::vari(1)),
         ),
     ));
     c_fn.add_var_decl(CVarDecl::new(
         CVarDef::new(9, "overflow".to_string(), CType::Bool),
         Some(
-            Expression::vari(3, None)
-                | Expression::vari(4, None)
-                | Expression::vari(5, None)
-                | Expression::vari(6, None)
-                | Expression::vari(7, None)
-                | Expression::vari(8, None),
+            Expression::vari(3)
+                | Expression::vari(4)
+                | Expression::vari(5)
+                | Expression::vari(6)
+                | Expression::vari(7)
+                | Expression::vari(8),
         ),
     ));
 
@@ -398,7 +398,7 @@ fn signed_mul<'tcx, 'ccx>(
     bb.push(Statement::from_expression(Expression::Return {
         value: Expression::strct(
             Expression::constant(c_struct.get_name()),
-            vec![Expression::unbvari(2, None), Expression::unbvari(9, None)],
+            vec![Expression::unbvari(2), Expression::unbvari(9)],
         ),
     }));
 
@@ -419,14 +419,14 @@ fn unsigned_mul<'tcx, 'ccx>(
     c_fn.add_signature_var(CVarDef::new(1, "second".to_string(), product_type.clone()));
     c_fn.add_var_decl(CVarDecl::new(
         CVarDef::new(2, "product".to_string(), product_type.clone()),
-        Some(Expression::vari(0, None) * Expression::vari(1, None)),
+        Some(Expression::vari(0) * Expression::vari(1)),
     ));
     c_fn.add_var_decl(CVarDecl::new(
         CVarDef::new(3, "overflow".to_string(), CType::Bool),
         Some(
-            Expression::vari(0, None).neq(Expression::constant(&"0".to_string()))
-                & (Expression::vari(2, None)
-                    / (Expression::vari(0, None)).neq(Expression::vari(1, None))),
+            Expression::vari(0).neq(Expression::constant(&"0".to_string()))
+                & (Expression::vari(2)
+                    / (Expression::vari(0)).neq(Expression::vari(1))),
         ),
     ));
 
@@ -435,7 +435,7 @@ fn unsigned_mul<'tcx, 'ccx>(
     bb.push(Statement::from_expression(Expression::Return {
         value: Expression::strct(
             Expression::constant(c_struct.get_name()),
-            vec![Expression::unbvari(2, None), Expression::unbvari(3, None)],
+            vec![Expression::unbvari(2), Expression::unbvari(3)],
         ),
     }));
     c_fn.push_bb(bb);

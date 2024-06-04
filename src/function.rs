@@ -23,6 +23,8 @@ pub struct CodegenFunctionCx<'tcx, 'ccx> {
     pub mir: &'tcx rustc_middle::mir::Body<'tcx>,
     pub ongoing_codegen: &'ccx mut OngoingCodegen,
     pub instance: Instance<'tcx>,
+    
+    ty_to_c: std::collections::HashMap<ty::Ty<'tcx>, CType>,
 }
 
 impl<'tcx> CodegenFunctionCx<'tcx, '_> {
@@ -35,6 +37,25 @@ impl<'tcx> CodegenFunctionCx<'tcx, '_> {
             ty::ParamEnv::reveal_all(),
             ty::EarlyBinder::bind(value),
         )
+    }
+
+    pub fn ty_for_local(&self, local: rustc_middle::mir::Local) -> ty::Ty<'tcx> {
+        self.monomorphize(self.mir.local_decls[local].ty)
+    }
+
+    pub fn rust_to_c_type(&mut self, ty: &ty::Ty<'tcx>) -> CType {
+        if self.ty_to_c.contains_key(ty) {
+            return self.ty_to_c[ty].clone();
+        }
+        
+        let ctype = rust_to_c_type(self.tcx, self.ongoing_codegen, ty);
+
+        self.ty_to_c.insert(*ty, ctype.clone());
+        return ctype;
+    }
+
+    pub fn ctype_from_cache(&self, ty: &ty::Ty<'tcx>) -> Option<CType> {
+        self.ty_to_c.get(ty).cloned()
     }
 }
 
@@ -147,12 +168,10 @@ fn print_mir<'tcx>(tcx: rustc_middle::ty::TyCtxt<'tcx>, mir: &rustc_middle::mir:
 }
 
 fn handle_decls<'tcx>(
-    tcx: rustc_middle::ty::TyCtxt<'tcx>,
-    ongoing_codegen: &mut OngoingCodegen,
-    mir: &rustc_middle::mir::Body<'tcx>,
+    ctx: &mut CodegenFunctionCx<'tcx, '_>,
     c_fn: &mut CFunction,
 ) {
-    let local_decls = &mir.local_decls;
+    let local_decls = &ctx.mir.local_decls;
 
     // TODO: Maybe use debug_info to get variable names
     //let debug_info = &mir.var_debug_info;
@@ -163,14 +182,14 @@ fn handle_decls<'tcx>(
     // Create set of usize
     let mut set: HashSet<usize> = HashSet::new();
 
-    mir.args_iter().for_each(|arg| {
+    ctx.mir.args_iter().for_each(|arg| {
         let ty = local_decls[arg].ty;
         let name = format!("var{}", arg.index());
 
         // add index to set
         set.insert(arg.index());
 
-        let c_var = CVarDef::new(arg.index(), name, rust_to_c_type(tcx, ongoing_codegen, &ty));
+        let c_var = CVarDef::new(arg.index(), name, ctx.rust_to_c_type(&ty));
         c_fn.add_signature_var(c_var);
     });
 
@@ -183,7 +202,7 @@ fn handle_decls<'tcx>(
 
         let ty = decl.ty;
         let name = format!("var{}", idx);
-        let c_ty = rust_to_c_type(tcx, ongoing_codegen, &ty);
+        let c_ty = ctx.rust_to_c_type(&ty);
         let c_var = CVarDef::new(idx, name, c_ty);
         c_fn.add_var_decl(CVarDecl::new(c_var, None));
     }
@@ -203,7 +222,7 @@ pub fn handle_fn<'tcx>(
     inst: Instance<'tcx>,
 ) {
     let mir = tcx.instance_mir(inst.def);
-    let mut fn_cx = CodegenFunctionCx { tcx, ongoing_codegen, instance: inst, mir };
+    let mut fn_cx = CodegenFunctionCx { tcx, ongoing_codegen, instance: inst, mir, ty_to_c: std::collections::HashMap::new()};
 
     let mut c_fn = CFunction::new(
         format_fn_name(&tcx.symbol_name(inst)),
@@ -214,7 +233,7 @@ pub fn handle_fn<'tcx>(
     print_mir(tcx, mir);
 
     // Handle local variables
-    handle_decls(tcx, fn_cx.ongoing_codegen, mir, &mut c_fn);
+    handle_decls(&mut fn_cx, &mut c_fn);
 
     trace!("{:?}", c_fn);
 
