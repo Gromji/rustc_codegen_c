@@ -1,0 +1,21 @@
+name: LLVM FileCheck
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  llvm-filecheck:
+    name: Run LLVM FileCheck
+    runs-on: ubuntu-latest
+    
+    steps:
+    - uses: actions/checkout@v3
+    
+    - name: Set up LLVM
+      run: sudo apt-get install llvm
+        
+    - name: Run FileCheck
+      run: make test
