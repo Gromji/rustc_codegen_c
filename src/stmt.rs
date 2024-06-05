@@ -3,6 +3,7 @@ use crate::crepr::{indent, Representable, RepresentationContext};
 use crate::expression::{Expression, VariableAccess};
 use crate::function::{CFunction, CodegenFunctionCx};
 use crate::header::handle_checked_op;
+use crate::structure::CTaggedUnionDef;
 use crate::ty::CType;
 use crate::utils;
 use rustc_middle::mir::{BinOp, ConstOperand, ConstValue, Operand, Place, Rvalue, StatementKind};
@@ -100,28 +101,29 @@ pub fn handle_place<'tcx, 'ccx>(
 
     let mut access = Vec::new();
 
-    let mut current_ty = fn_cx.ty_for_local(place.local);
+    let current_ty = fn_cx.ty_for_local(place.local);
+
+    let mut ctype = fn_cx
+        .ctype_from_cache(&current_ty)
+        .expect("No ctype found in cache for rust type");
 
     for proj in place.projection {
         match proj {
             rustc_middle::mir::ProjectionElem::Field(field, ty) => {
-                let ctype = fn_cx
-                    .ctype_from_cache(&current_ty)
-                    .expect("No ctype found in cache for rust type"); // I don't expect this to happen since any variable accessed at this point should already be in the cache. Hopefully I won't be proven wrong
-
                 debug!("Field: {:?}, Type: {:?}, current_ty: {:?}, next_ty: {:?}", field, ctype, current_ty, ty);
 
-                current_ty = ty;
-
                 match ctype {
-                    CType::Struct(struct_info) => {
+                    CType::Struct(info) | CType::Union(info) => {
                         access.push(VariableAccess::Field {
                             name: fn_cx
                                 .ongoing_codegen
                                 .context
-                                .get_field_name_for_struct(&struct_info.name, field.as_usize())
+                                .get_field_name_for_struct(&info, field.as_usize())
                                 .unwrap(),
                         });
+
+                        // shortcut to get the ctype of the next field
+                        ctype = fn_cx.ctype_from_cache(&ty).expect("No ctype found in cache for rust type");
                     }
                     _ => {
                         error!("Expected struct type, got {:?}", ctype);
@@ -141,13 +143,45 @@ pub fn handle_place<'tcx, 'ccx>(
             rustc_middle::mir::ProjectionElem::Subslice { .. } => {
                 todo!("Subslice")
             }
-            rustc_middle::mir::ProjectionElem::Downcast(_, _) => {
-                todo!("Downcast")
+
+            rustc_middle::mir::ProjectionElem::Downcast(_, variant_idx) => {
+                match ctype {
+                    CType::TaggedUnion(union_info) => {
+                        // access the union field
+                        access.push(VariableAccess::Field {
+                            name: CTaggedUnionDef::UNION_NAME.to_string(),
+                        });
+
+                        // find the struct of the actual union
+                        let t_union_def = fn_cx.ongoing_codegen.context.get_composite(&union_info).as_tagged_union_def();
+                        let union_def = fn_cx.ongoing_codegen.context.get_composite(&t_union_def.union_var.get_type().as_composite_info()).as_struct_def();
+
+                        // access the variant
+                        let variant_field = &union_def.fields[variant_idx.as_usize()];
+                        access.push(VariableAccess::Field {
+                            name: variant_field.get_name()
+                        });
+
+                        // set ctype to correct variant
+                        ctype = variant_field.get_type().clone();
+                    }
+                    
+                    _ => {
+                        // unsure what other types might get downcast, for now just panic
+                        panic!("Expected tagged union type, got {:?}", ctype);
+                    }
+                }    
             }
 
             rustc_middle::mir::ProjectionElem::Deref => {
-                current_ty = current_ty.builtin_deref(true).unwrap();
                 access.push(VariableAccess::Dereference);
+
+                // Another shortcut
+                ctype = fn_cx.ctype_from_cache(&current_ty.builtin_deref(true).unwrap()).expect("No ctype found in cache for rust type");
+            }
+
+            rustc_middle::mir::ProjectionElem::OpaqueCast(_) => {
+                error!("OpaqueCast")
             }
             
             _ => {}
@@ -193,9 +227,12 @@ fn handle_assign<'tcx, 'ccx>(
             let lhs = handle_operand(fn_cx, &operands.0);
             let rhs = handle_operand(fn_cx, &operands.1);
             let ty = operands.0.ty(&fn_cx.mir.local_decls, fn_cx.tcx);
+
+            let place_ty = fn_cx.ty_for_local(place.local);
+
             match op {
                 BinOp::AddWithOverflow | BinOp::SubWithOverflow | BinOp::MulWithOverflow => {
-                    handle_checked_op(fn_cx, op.into(), lhs, rhs, &ty)
+                    handle_checked_op(fn_cx, op.into(), lhs, rhs, &ty, &place_ty)
                 }
                 _ => Expression::BinaryOp {
                     op: op.into(),
@@ -229,6 +266,18 @@ fn handle_assign<'tcx, 'ccx>(
             debug!("Assign COPY FOR DEREF: {:?}", place);
 
             handle_place(fn_cx, place)
+        }
+
+        Rvalue::Discriminant(place) => {
+            debug!("Assign DISCRIMINANT: {:?}", place);
+
+            if let Expression::Variable { local, access } = handle_place(fn_cx, place) {
+                let mut modified_access = access;
+                modified_access.push(VariableAccess::Field { name: CTaggedUnionDef::TAG_NAME.to_string() });
+                Expression::Variable { local, access: modified_access }
+            } else {
+                unreachable!("non variable for handle_place")
+            }
         }
 
         _ => {

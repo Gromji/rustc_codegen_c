@@ -42,3 +42,8 @@ pub fn scalar_to_float(value: &Scalar) -> String {
         Scalar::Ptr(_, _) => panic!("Trying to get value of a pointer that is not supported!"),
     }
 }
+
+pub fn truncate_to_size(value: u128, bytes: usize) -> u128 {
+    let mask = (1 << (bytes * 8)) - 1;
+    value & mask
+}

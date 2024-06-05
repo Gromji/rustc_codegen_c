@@ -1,6 +1,7 @@
 use crate::{
     bb::BasicBlockIdentifier,
-    crepr::{indent, Representable, RepresentationContext}, ty::CType,
+    crepr::{indent, Representable, RepresentationContext},
+    ty::CType,
 };
 use std::{
     fmt,
@@ -138,15 +139,9 @@ impl Representable for UnaryOpType {
 pub enum VariableAccess {
     Reference,
     Dereference,
-    Field {
-        name: String,
-    },
-    Index {
-        idx: usize,
-    },
-    Cast {
-        ty: CType,
-    }
+    Field { name: String },
+    Index { idx: usize },
+    Cast { ty: CType },
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -175,6 +170,21 @@ pub enum Expression {
         name: Box<Expression>,
         fields: Vec<Expression>,
     },
+
+    /*
+       typedef struct {
+           int a;
+           int b;
+       } TestStruct;
+
+       TestStruct test = { .a = 1, .b = 2 };
+
+       as far as I am aware, this is a GCC extension, not sure if all compilers allow it;
+    */
+    NamedStruct {
+        name: Box<Expression>,
+        fields: Vec<(String, Expression)>,
+    },
     Array {
         fields: Vec<Expression>,
     },
@@ -198,31 +208,58 @@ pub enum Expression {
 impl Expression {
     /// Returns Expression::Assignment
     pub fn assign(&self, rhs: Box<Expression>) -> Expression {
-        Expression::Assignment { lhs: Box::new(self.clone()), rhs }
+        Expression::Assignment {
+            lhs: Box::new(self.clone()),
+            rhs,
+        }
     }
     pub fn gt(&self, rhs: Box<Expression>) -> Box<Expression> {
-        Box::new(Expression::BinaryOp { op: BinOpType::Gt, lhs: Box::new(self.clone()), rhs })
+        Box::new(Expression::BinaryOp {
+            op: BinOpType::Gt,
+            lhs: Box::new(self.clone()),
+            rhs,
+        })
     }
     pub fn lt(&self, rhs: Box<Expression>) -> Box<Expression> {
-        Box::new(Expression::BinaryOp { op: BinOpType::Lt, lhs: Box::new(self.clone()), rhs })
+        Box::new(Expression::BinaryOp {
+            op: BinOpType::Lt,
+            lhs: Box::new(self.clone()),
+            rhs,
+        })
     }
     pub fn neq(&self, rhs: Box<Expression>) -> Box<Expression> {
-        Box::new(Expression::BinaryOp { op: BinOpType::Ne, lhs: Box::new(self.clone()), rhs })
+        Box::new(Expression::BinaryOp {
+            op: BinOpType::Ne,
+            lhs: Box::new(self.clone()),
+            rhs,
+        })
     }
     pub fn equ(&self, rhs: Box<Expression>) -> Box<Expression> {
-        Box::new(Expression::BinaryOp { op: BinOpType::Eq, lhs: Box::new(self.clone()), rhs })
+        Box::new(Expression::BinaryOp {
+            op: BinOpType::Eq,
+            lhs: Box::new(self.clone()),
+            rhs,
+        })
     }
     pub fn constant(value: &String) -> Box<Expression> {
-        Box::new(Expression::Constant { value: value.clone() })
+        Box::new(Expression::Constant {
+            value: value.clone(),
+        })
     }
     pub fn arr_vari(local: usize, idx: usize) -> Box<Expression> {
-        Box::new(Expression::Variable { local, access: vec![VariableAccess::Index { idx }] })
+        Box::new(Expression::Variable {
+            local,
+            access: vec![VariableAccess::Index { idx }],
+        })
     }
     pub fn vari(local: usize) -> Box<Expression> {
         Box::new(Expression::unbvari(local))
     }
     pub fn unbvari(local: usize) -> Expression {
-        Expression::Variable { local, access: Vec::new() }
+        Expression::Variable {
+            local,
+            access: Vec::new(),
+        }
     }
     pub fn strct(name: Box<Expression>, fields: Vec<Expression>) -> Box<Expression> {
         Box::new(Expression::Struct { name, fields })
@@ -232,42 +269,66 @@ impl Add for Box<Expression> {
     type Output = Self;
 
     fn add(self, rhs: Self) -> Self {
-        Box::new(Expression::BinaryOp { op: BinOpType::Add, lhs: self, rhs })
+        Box::new(Expression::BinaryOp {
+            op: BinOpType::Add,
+            lhs: self,
+            rhs,
+        })
     }
 }
 impl Sub for Box<Expression> {
     type Output = Self;
 
     fn sub(self, rhs: Self) -> Self {
-        Box::new(Expression::BinaryOp { op: BinOpType::Sub, lhs: self, rhs })
+        Box::new(Expression::BinaryOp {
+            op: BinOpType::Sub,
+            lhs: self,
+            rhs,
+        })
     }
 }
 impl Mul for Box<Expression> {
     type Output = Self;
 
     fn mul(self, rhs: Self) -> Self {
-        Box::new(Expression::BinaryOp { op: BinOpType::Mul, lhs: self, rhs })
+        Box::new(Expression::BinaryOp {
+            op: BinOpType::Mul,
+            lhs: self,
+            rhs,
+        })
     }
 }
 impl Div for Box<Expression> {
     type Output = Self;
 
     fn div(self, rhs: Self) -> Self {
-        Box::new(Expression::BinaryOp { op: BinOpType::Div, lhs: self, rhs })
+        Box::new(Expression::BinaryOp {
+            op: BinOpType::Div,
+            lhs: self,
+            rhs,
+        })
     }
 }
 impl BitOr for Box<Expression> {
     type Output = Self;
 
     fn bitor(self, rhs: Self) -> Self {
-        Box::new(Expression::BinaryOp { op: BinOpType::Or, lhs: self, rhs })
+        Box::new(Expression::BinaryOp {
+            op: BinOpType::Or,
+            lhs: self,
+            rhs,
+        })
     }
 }
 impl BitAnd for Box<Expression> {
     type Output = Self;
 
     fn bitand(self, rhs: Self) -> Self {
-        Box::new(Expression::BinaryOp { op: BinOpType::And, lhs: self, rhs })
+        Box::new(Expression::BinaryOp {
+            op: BinOpType::And,
+            lhs: self,
+            rhs,
+        })
     }
 }
 
@@ -278,34 +339,33 @@ impl Representable for Expression {
                 write!(f, "{}", value)
             }
 
-            Expression::Variable { local, access} => {
-                
+            Expression::Variable { local, access } => {
                 if context.cur_fn.is_none() {
                     panic!("No current function set in context");
                 }
-                
+
                 let var = context.cur_fn.unwrap().get_local_var(*local);
-                
+
                 let mut var_repr = var.get_name();
-                
+
                 for access in access {
                     match access {
                         VariableAccess::Reference => {
                             var_repr = format!("&{}", var_repr);
                         }
-                        
+
                         VariableAccess::Dereference => {
                             var_repr = format!("(*{})", var_repr);
                         }
 
                         VariableAccess::Field { name } => {
-                            var_repr = format!{"{}.{}", var_repr, name};
+                            var_repr = format! {"{}.{}", var_repr, name};
                         }
-                        
+
                         VariableAccess::Index { idx } => {
-                            var_repr = format!{"{}[{}]", var_repr, idx};
+                            var_repr = format! {"{}[{}]", var_repr, idx};
                         }
-                        
+
                         VariableAccess::Cast { ty } => {
                             // the :? is a bit of a hack, but it should work for now
                             var_repr = format!("(({:?}){})", ty, var_repr);
@@ -353,6 +413,22 @@ impl Representable for Expression {
                 }
                 write!(f, " }}")
             }
+
+            Expression::NamedStruct { name, fields } => {
+                // (struct {}){ {} } (eg. (struct struct_name) { {1}, {2} })
+                write!(f, "(")?;
+                name.repr(f, context)?;
+                write!(f, "){{ ")?;
+                for (i, (field_name, field)) in fields.iter().enumerate() {
+                    if i != 0 {
+                        write!(f, ", ")?;
+                    }
+                    write!(f, ".{} = ", field_name)?;
+                    field.repr(f, context)?;
+                }
+                write!(f, " }}")
+            }
+
             Expression::Array { fields } => {
                 // {}, {}, ..., {}; (eg. {var1[0]=1}, {var1[1]=2}, {var1[2]=5};)
                 for (i, field) in fields.iter().enumerate() {
@@ -384,7 +460,11 @@ impl Representable for Expression {
                 Ok(())
             }
 
-            Expression::SwitchJump { value, cases, default } => {
+            Expression::SwitchJump {
+                value,
+                cases,
+                default,
+            } => {
                 write!(f, "switch (")?;
                 value.repr(f, context)?;
                 write!(f, ")")?;

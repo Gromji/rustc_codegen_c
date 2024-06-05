@@ -39,7 +39,7 @@ pub fn write_prototypes(functions: &Vec<function::CFunction>, file: &mut File) {
 }
 
 // Write structs to the file
-pub fn write_structs(structs: &Vec<structure::CStruct>, file: &mut File) {
+pub fn write_structs(structs: &Vec<structure::CComposite>, file: &mut File) {
     let structs = structs.iter().map(|s| format!("{:?}", s)).collect::<Vec<String>>();
 
     // Write newline

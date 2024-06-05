@@ -24,7 +24,7 @@ pub struct CodegenFunctionCx<'tcx, 'ccx> {
     pub ongoing_codegen: &'ccx mut OngoingCodegen,
     pub instance: Instance<'tcx>,
 
-    pub(crate) ty_to_c: std::collections::HashMap<ty::Ty<'tcx>, CType>,
+    pub(crate) ty_to_c: &'ccx mut std::collections::HashMap<ty::Ty<'tcx>, CType>,
 }
 
 impl<'tcx> CodegenFunctionCx<'tcx, '_> {
@@ -204,10 +204,11 @@ pub fn format_fn_name(name: &SymbolName) -> String {
 }
 
 #[allow(unused_variables)]
-pub fn handle_fn<'tcx>(
+pub fn handle_fn<'tcx, 'ccx>(
     tcx: rustc_middle::ty::TyCtxt<'tcx>,
     ongoing_codegen: &mut OngoingCodegen,
     inst: Instance<'tcx>,
+    rust_to_c_map: &'ccx mut std::collections::HashMap<ty::Ty<'tcx>, CType>,
 ) {
     let mir = tcx.instance_mir(inst.def);
     let mut fn_cx = CodegenFunctionCx {
@@ -215,7 +216,7 @@ pub fn handle_fn<'tcx>(
         ongoing_codegen,
         instance: inst,
         mir,
-        ty_to_c: std::collections::HashMap::new(),
+        ty_to_c: rust_to_c_map,
     };
 
     let mut c_fn = CFunction::new(
