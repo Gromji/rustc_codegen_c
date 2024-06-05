@@ -19,6 +19,7 @@ impl CStruct {
         }
     }
 
+    #[allow(dead_code)]
     pub fn push(&mut self, field: CVarDef) {
         self.fields.push(field);
     }
@@ -79,6 +80,11 @@ impl<'tcx> From<&Vec<CType>> for CStruct {
         for ty in list {
             struct_name.push_str(&format!("{:?}", ty));
         }
+
+        // TODO(@Luka) I hate having to do this, I think we should rework how structures get generated in general
+        // should work for now though :)
+        struct_name = struct_name.replace("*", "_PTR_");
+
         let fields = list
             .iter()
             .enumerate()

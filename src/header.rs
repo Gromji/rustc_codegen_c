@@ -8,7 +8,7 @@ use crate::{
     function::{CFunction, CodegenFunctionCx},
     stmt::Statement,
     structure::CStruct,
-    ty::{rust_to_c_type, CStructInfo, CType},
+    ty::{CStructInfo, CType},
 };
 use rustc_middle::ty::Ty;
 use tracing::{debug_span, debug};
@@ -52,7 +52,7 @@ pub fn handle_checked_op<'tcx, 'ccx>(
     let span = debug_span!("handle_checked_op").entered();
     // We can change the naming of the functions later
     let fn_name = format!("{op}_{ty:?}");
-    let fields = vec![rust_to_c_type(fn_cx.tcx, fn_cx.ongoing_codegen, ty), CType::Bool];
+    let fields = vec![fn_cx.rust_to_c_type(ty), CType::Bool];
     let c_struct = fn_cx.ongoing_codegen.context.get_struct(&fields);
     if !fn_cx.ongoing_codegen.context.exists_header_fn_with_name(fn_name.as_str()) {
         debug!("Function for {fn_name} not found, creating one!");

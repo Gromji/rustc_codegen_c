@@ -57,9 +57,13 @@ impl CVarDecl {
     pub fn get_var(&self) -> &CVarDef {
         &self.var
     }
+
+    #[allow(dead_code)]
     pub fn get_var_type(&self) -> &CType {
         &self.var.ty
     }
+
+    #[allow(dead_code)]
     pub fn get_name(&self) -> String {
         self.var.get_name()
     }

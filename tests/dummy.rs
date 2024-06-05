@@ -22,6 +22,8 @@ fn main() {
 
     let a = add_many(a);
 
+    let a = test_closure(a, a);
+
     if a > 0 {
         let b = 2;
     } else {
@@ -53,6 +55,11 @@ fn test() -> i32 {
     let o = 0..1;
 
     return 5;
+}
+
+fn test_closure(val1: i32, val2: i32) -> i32 {
+    let a = |x: i32| x + val1 + val2;
+    return a(5);
 }
 
 fn add_many(x: i32) -> i32 {

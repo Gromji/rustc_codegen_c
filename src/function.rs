@@ -1,7 +1,7 @@
 use crate::bb::{self, BasicBlock};
 use crate::crepr::{indent, Representable, RepresentationContext};
 use crate::definition::CVarDef;
-use crate::ty::{rust_to_c_type, CType};
+use crate::ty::CType;
 use crate::{base::OngoingCodegen, definition::CVarDecl};
 use rustc_middle::ty::{self, Instance, SymbolName, TyCtxt, TypeFoldable};
 use std::collections::HashSet;
@@ -23,8 +23,8 @@ pub struct CodegenFunctionCx<'tcx, 'ccx> {
     pub mir: &'tcx rustc_middle::mir::Body<'tcx>,
     pub ongoing_codegen: &'ccx mut OngoingCodegen,
     pub instance: Instance<'tcx>,
-    
-    ty_to_c: std::collections::HashMap<ty::Ty<'tcx>, CType>,
+
+    pub(crate) ty_to_c: std::collections::HashMap<ty::Ty<'tcx>, CType>,
 }
 
 impl<'tcx> CodegenFunctionCx<'tcx, '_> {
@@ -41,17 +41,6 @@ impl<'tcx> CodegenFunctionCx<'tcx, '_> {
 
     pub fn ty_for_local(&self, local: rustc_middle::mir::Local) -> ty::Ty<'tcx> {
         self.monomorphize(self.mir.local_decls[local].ty)
-    }
-
-    pub fn rust_to_c_type(&mut self, ty: &ty::Ty<'tcx>) -> CType {
-        if self.ty_to_c.contains_key(ty) {
-            return self.ty_to_c[ty].clone();
-        }
-        
-        let ctype = rust_to_c_type(self.tcx, self.ongoing_codegen, ty);
-
-        self.ty_to_c.insert(*ty, ctype.clone());
-        return ctype;
     }
 
     pub fn ctype_from_cache(&self, ty: &ty::Ty<'tcx>) -> Option<CType> {
@@ -80,7 +69,7 @@ impl Representable for CFunction {
             write!(f, "\n")?;
         }
 
-        for (i, bb) in self.basic_blocks.iter().enumerate() {
+        for bb in self.basic_blocks.iter() {
             bb.repr(f, &new_context)?;
         }
 
@@ -150,6 +139,8 @@ impl CFunction {
         }
         panic!("Local variable with id {} not found", idx);
     }
+
+    #[allow(dead_code)]
     pub fn get_local_var_name(&self, idx: usize) -> String {
         self.get_local_var(idx).get_name()
     }
@@ -167,10 +158,7 @@ fn print_mir<'tcx>(tcx: rustc_middle::ty::TyCtxt<'tcx>, mir: &rustc_middle::mir:
     debug!("{}", &String::from_utf8_lossy(&buf).into_owned());
 }
 
-fn handle_decls<'tcx>(
-    ctx: &mut CodegenFunctionCx<'tcx, '_>,
-    c_fn: &mut CFunction,
-) {
+fn handle_decls<'tcx>(ctx: &mut CodegenFunctionCx<'tcx, '_>, c_fn: &mut CFunction) {
     let local_decls = &ctx.mir.local_decls;
 
     // TODO: Maybe use debug_info to get variable names
@@ -210,7 +198,7 @@ fn handle_decls<'tcx>(
 
 /*TODO(Luka) this sort of function name extraction is not ideal, but might be necessary to avoid collisions, needs more thought, should also look at other codegens*/
 pub fn format_fn_name(name: &SymbolName) -> String {
-    let mut name = name.to_string();
+    let mut name = name.name.to_string();
     name = name.replace('.', "_").replace('$', "_");
     name
 }
@@ -222,11 +210,17 @@ pub fn handle_fn<'tcx>(
     inst: Instance<'tcx>,
 ) {
     let mir = tcx.instance_mir(inst.def);
-    let mut fn_cx = CodegenFunctionCx { tcx, ongoing_codegen, instance: inst, mir, ty_to_c: std::collections::HashMap::new()};
+    let mut fn_cx = CodegenFunctionCx {
+        tcx,
+        ongoing_codegen,
+        instance: inst,
+        mir,
+        ty_to_c: std::collections::HashMap::new(),
+    };
 
     let mut c_fn = CFunction::new(
         format_fn_name(&tcx.symbol_name(inst)),
-        rust_to_c_type(fn_cx.tcx, fn_cx.ongoing_codegen, &mir.return_ty()),
+        fn_cx.rust_to_c_type(&mir.return_ty()),
     );
 
     // Pring mir of function for debugging

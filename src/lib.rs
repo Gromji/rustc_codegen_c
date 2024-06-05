@@ -9,6 +9,8 @@ extern crate rustc_metadata;
 extern crate rustc_middle;
 extern crate rustc_session;
 extern crate rustc_span;
+extern crate rustc_index;
+extern crate rustc_target;
 
 use base::OngoingCodegen;
 
