@@ -27,8 +27,8 @@ use crate::function;
 use crate::header;
 use crate::include;
 use crate::prefix;
-use crate::structure;
-use crate::ty::CType;
+use crate::structure::{self, CComposite, CStructDef};
+use crate::ty::{CCompositeInfo, CType};
 use crate::write;
 
 pub struct Context {
@@ -37,7 +37,7 @@ pub struct Context {
     defines: Vec<header::CDefine>,
     functions: Vec<function::CFunction>,
     header_functions: Vec<function::CFunction>,
-    structs: Vec<structure::CStruct>,
+    structs: Vec<structure::CComposite>,
 }
 
 impl Context {
@@ -89,11 +89,11 @@ impl Context {
         &mut self.header_functions
     }
 
-    pub fn get_structs(&self) -> &Vec<structure::CStruct> {
+    pub fn get_structs(&self) -> &Vec<structure::CComposite> {
         &self.structs
     }
 
-    pub fn get_mut_structs(&mut self) -> &mut Vec<structure::CStruct> {
+    pub fn get_mut_structs(&mut self) -> &mut Vec<structure::CComposite> {
         &mut self.structs
     }
 
@@ -106,37 +106,45 @@ impl Context {
         return false;
     }
 
-    /// Get the name of a struct that has the same list of types, or create one if it doesn't exist.
-    pub fn get_struct(&mut self, list: &Vec<CType>) -> structure::CStruct {
-        let cur_struct = structure::CStruct::from(list);
-        let structs = self.get_structs();
-        for s in structs {
-            if s == &cur_struct {
-                return s.clone();
-            }
-        }
-        // Struct doesn't exist, create it
-        self.get_mut_structs().push(cur_struct.clone());
-        return cur_struct;
+    pub fn add_composite(&mut self, composite: &CComposite) -> CCompositeInfo {
+        self.get_mut_structs().push(composite.clone());
+
+        let struct_idx = self.get_structs().len() - 1;
+
+        let name = composite.get_name();
+
+        return CCompositeInfo {
+            name,
+            ctx_idx: struct_idx,
+        };
     }
 
-    pub fn get_field_name_for_struct(&self, struct_name: &str, idx: usize) -> Option<String> {
-        for s in self.get_structs() {
-            if s.get_name() == struct_name {
-                return Some(s.get_field(idx).get_name().clone());
-            }
+    pub fn get_composite(&self, info: &CCompositeInfo) -> CComposite {
+        if self.get_structs().len() <= info.ctx_idx {
+            panic!("Struct with index {} not found", info.ctx_idx);
         }
-        
-        return None;
+
+        return self.get_structs()[info.ctx_idx].clone();
     }
 
-    pub fn has_struct_with_name(&self, name: &str) -> bool {
-        for s in self.get_structs() {
-            if s.get_name() == name {
-                return true;
-            }
+    pub fn get_struct_def(&self, info: &CCompositeInfo) -> Option<CStructDef> {
+        match self.get_composite(info) {
+            CComposite::Struct(s) | CComposite::Union(s) => return Some(s),
+            _ => return None,
         }
-        return false;
+    }
+
+    pub fn get_field_name_for_struct(&self, info: &CCompositeInfo, idx: usize) -> Option<String> {
+        if self.get_structs().len() <= info.ctx_idx {
+            return None;
+        }
+
+        match &self.get_structs()[info.ctx_idx] {
+            CComposite::Struct(s) | CComposite::Union(s) => {
+                return Some(s.fields[idx].get_name().clone());
+            }
+            _ => return None,
+        }
     }
 
     pub fn has_define_with_name(&self, name: &String) -> bool {
@@ -179,7 +187,7 @@ impl OngoingCodegen {
         write::write_defines(ongoing_codegen.context.get_defines(), &mut header_file);
 
         write::write_structs(ongoing_codegen.context.get_structs(), &mut header_file);
-        
+
         write::write_prototypes(ongoing_codegen.context.get_functions(), &mut header_file);
 
         write::write_functions(ongoing_codegen.context.get_functions(), &mut file, false);
@@ -221,10 +229,11 @@ impl OngoingCodegen {
     }
 }
 
-fn transpile_cgu<'tcx>(
+fn transpile_cgu<'tcx, 'ccx>(
     tcx: rustc_middle::ty::TyCtxt<'tcx>,
     cgu: &CodegenUnit<'tcx>,
     ongoing_codegen: &mut OngoingCodegen,
+    rust_to_c_map: &'ccx mut std::collections::HashMap<rustc_middle::ty::Ty<'tcx>, CType>,
 ) {
     for (item, _data) in cgu.items() {
         if item.def_id().krate != 0u32.into() {
@@ -234,7 +243,7 @@ fn transpile_cgu<'tcx>(
         match item {
             MonoItem::Fn(inst) => {
                 with_no_trimmed_paths!({
-                    function::handle_fn(tcx, ongoing_codegen, inst.clone());
+                    function::handle_fn(tcx, ongoing_codegen, inst.clone(), rust_to_c_map);
                 });
             }
             MonoItem::Static(def) => {
@@ -252,7 +261,11 @@ pub fn run<'tcx>(
     metadata: rustc_metadata::EncodedMetadata,
 ) -> Box<(String, OngoingCodegen, EncodedMetadata, CrateInfo)> {
     let cgus: Vec<_> = tcx.collect_and_partition_mono_items(()).1.iter().collect();
-    let mut ongoing_codegen = Box::new(OngoingCodegen { context: Context::new() });
+    let mut ongoing_codegen = Box::new(OngoingCodegen {
+        context: Context::new(),
+    });
+    let mut rust_to_c_map: std::collections::HashMap<rustc_middle::ty::Ty<'tcx>, CType> =
+        std::collections::HashMap::new();
 
     tracing_subscriber::FmtSubscriber::builder()
         .with_line_number(true)
@@ -265,10 +278,15 @@ pub fn run<'tcx>(
     prefix::build_prefix(&mut ongoing_codegen.context);
 
     for cgu in &cgus {
-        transpile_cgu(tcx, cgu, &mut ongoing_codegen);
+        transpile_cgu(tcx, cgu, &mut ongoing_codegen, &mut rust_to_c_map);
     }
 
     let name: String = cgus.iter().next().unwrap().name().to_string();
 
-    Box::new((name, *ongoing_codegen, metadata, CrateInfo::new(tcx, "c".to_string())))
+    Box::new((
+        name,
+        *ongoing_codegen,
+        metadata,
+        CrateInfo::new(tcx, "c".to_string()),
+    ))
 }

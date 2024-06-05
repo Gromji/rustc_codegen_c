@@ -7,11 +7,11 @@ use crate::{
     expression::{BinOpType, Expression},
     function::{CFunction, CodegenFunctionCx},
     stmt::Statement,
-    structure::CStruct,
-    ty::{CStructInfo, CType},
+    structure::CStructDef,
+    ty::CType,
 };
 use rustc_middle::ty::Ty;
-use tracing::{debug_span, debug};
+use tracing::{debug, debug_span};
 
 // We will need to change structure of CDefine for more versitile use
 pub struct CDefine {
@@ -48,41 +48,63 @@ pub fn handle_checked_op<'tcx, 'ccx>(
     lhs: Expression,
     rhs: Expression,
     ty: &Ty<'tcx>,
+    place_ty: &Ty<'tcx>,
 ) -> Expression {
     let span = debug_span!("handle_checked_op").entered();
     // We can change the naming of the functions later
     let fn_name = format!("{op}_{ty:?}");
-    let fields = vec![fn_cx.rust_to_c_type(ty), CType::Bool];
-    let c_struct = fn_cx.ongoing_codegen.context.get_struct(&fields);
-    if !fn_cx.ongoing_codegen.context.exists_header_fn_with_name(fn_name.as_str()) {
+
+    let return_ty = fn_cx.rust_to_c_type(place_ty);
+    let c_struct: CStructDef = if let CType::Struct(info) = return_ty.clone() {
+        fn_cx
+            .ongoing_codegen
+            .context
+            .get_struct_def(&info)
+            .expect("Struct not found for provided info")
+    } else {
+        panic!(
+            "Expected struct type as return of checked_op, return ty {:?}",
+            place_ty
+        );
+    };
+
+    if !fn_cx
+        .ongoing_codegen
+        .context
+        .exists_header_fn_with_name(fn_name.as_str())
+    {
         debug!("Function for {fn_name} not found, creating one!");
         let checked_op = match op {
             BinOpType::CheckedAdd => {
                 if ty.is_signed() {
-                    signed_add(fn_cx, &fn_name, &c_struct)
+                    signed_add(fn_cx, &fn_name, &c_struct, return_ty)
                 } else {
-                    unsigned_add(fn_cx, &fn_name, &c_struct)
+                    unsigned_add(fn_cx, &fn_name, &c_struct, return_ty)
                 }
             }
             BinOpType::CheckedSub => {
                 if ty.is_signed() {
-                    signed_sub(fn_cx, &fn_name, &c_struct)
+                    signed_sub(fn_cx, &fn_name, &c_struct, return_ty)
                 } else {
-                    unsigned_sub(fn_cx, &fn_name, &c_struct)
+                    unsigned_sub(fn_cx, &fn_name, &c_struct, return_ty)
                 }
             }
             BinOpType::CheckedMul => {
                 if ty.is_signed() {
-                    signed_mul(fn_cx, &fn_name, &c_struct)
+                    signed_mul(fn_cx, &fn_name, &c_struct, return_ty)
                 } else {
-                    unsigned_mul(fn_cx, &fn_name, &c_struct)
+                    unsigned_mul(fn_cx, &fn_name, &c_struct, return_ty)
                 }
             }
             _ => {
                 todo!("Checked operation not handled: {:?}", op);
             }
         };
-        fn_cx.ongoing_codegen.context.get_mut_header_functions().push(checked_op);
+        fn_cx
+            .ongoing_codegen
+            .context
+            .get_mut_header_functions()
+            .push(checked_op);
     }
     span.exit();
     Expression::FnCall {
@@ -102,25 +124,40 @@ fn extremum_val_of_type<'tcx, 'ccx>(
             let max_int = format!("INT{bit_width}_MAX");
             let min_int = format!("INT{bit_width}_MIN");
             if bit_width == 128 {
-                if !fn_cx.ongoing_codegen.context.has_define_with_name(&max_uint) {
+                if !fn_cx
+                    .ongoing_codegen
+                    .context
+                    .has_define_with_name(&max_uint)
+                {
                     //#define UINT128_MAX (__uint128_t)(-1)
                     fn_cx
                         .ongoing_codegen
                         .context
                         .get_mut_defines()
-                        .push(CDefine::new(max_uint.clone(), "(__uint128_t)(-1)".to_string()));
+                        .push(CDefine::new(
+                            max_uint.clone(),
+                            "(__uint128_t)(-1)".to_string(),
+                        ));
                 }
                 if !fn_cx.ongoing_codegen.context.has_define_with_name(&max_int) {
                     //#define INT128_MAX (__int128_t)(UINT128_MAX >> 1)
-                    fn_cx.ongoing_codegen.context.get_mut_defines().push(CDefine::new(
-                        max_int.clone(),
-                        format!("(__int128_t)({max_uint} >> 1)"),
-                    ));
+                    fn_cx
+                        .ongoing_codegen
+                        .context
+                        .get_mut_defines()
+                        .push(CDefine::new(
+                            max_int.clone(),
+                            format!("(__int128_t)({max_uint} >> 1)"),
+                        ));
                     //#define INT128_MIN (__int128_t)(-INT128_MAX - 1)
-                    fn_cx.ongoing_codegen.context.get_mut_defines().push(CDefine::new(
-                        min_int.clone(),
-                        "(__int128_t)(-INT128_MAX - 1)".to_string(),
-                    ));
+                    fn_cx
+                        .ongoing_codegen
+                        .context
+                        .get_mut_defines()
+                        .push(CDefine::new(
+                            min_int.clone(),
+                            "(__int128_t)(-INT128_MAX - 1)".to_string(),
+                        ));
                 }
             }
             (max_int, min_int)
@@ -129,13 +166,20 @@ fn extremum_val_of_type<'tcx, 'ccx>(
             let bit_width = c_uint_ty.bit_width();
             let max_uint = format!("UINT{bit_width}_MAX");
             if bit_width == 128 {
-                if !fn_cx.ongoing_codegen.context.has_define_with_name(&max_uint) {
+                if !fn_cx
+                    .ongoing_codegen
+                    .context
+                    .has_define_with_name(&max_uint)
+                {
                     //#define UINT128_MAX (uint128_t)(-1)
                     fn_cx
                         .ongoing_codegen
                         .context
                         .get_mut_defines()
-                        .push(CDefine::new(max_uint.clone(), "(uint128_t)(-1)".to_string()));
+                        .push(CDefine::new(
+                            max_uint.clone(),
+                            "(uint128_t)(-1)".to_string(),
+                        ));
                 }
             }
             (max_uint, "0".to_string())
@@ -147,11 +191,12 @@ fn extremum_val_of_type<'tcx, 'ccx>(
 fn signed_add<'tcx, 'ccx>(
     fn_cx: &mut CodegenFunctionCx<'tcx, 'ccx>,
     fn_name: &String,
-    c_struct: &CStruct,
+    c_struct: &CStructDef,
+    return_ty: CType,
 ) -> CFunction {
-    let return_type = CType::Struct(CStructInfo::new(c_struct.get_name()));
-    let sum_type = c_struct.get_field(0).get_type();
-    let mut c_fn = CFunction::new(fn_name.clone(), return_type.clone());
+    let field = c_struct.get_field(0);
+    let sum_type = field.get_type();
+    let mut c_fn = CFunction::new(fn_name.clone(), return_ty);
     let (max_int_str, min_int_str) = extremum_val_of_type(fn_cx, sum_type);
     c_fn.add_signature_var(CVarDef::new(0, "first".to_string(), sum_type.clone()));
     c_fn.add_signature_var(CVarDef::new(1, "second".to_string(), sum_type.clone()));
@@ -164,8 +209,7 @@ fn signed_add<'tcx, 'ccx>(
         CVarDef::new(3, "overflow_a".to_string(), CType::Bool),
         Some(
             Expression::vari(1).gt(Expression::constant(&"0".to_string()))
-                & Expression::vari(0)
-                    .gt(Expression::constant(&max_int_str) - Expression::vari(1)),
+                & Expression::vari(0).gt(Expression::constant(&max_int_str) - Expression::vari(1)),
         ),
     ));
     // (second < 0 && first < INT{bit_width}_MIN - second)
@@ -173,8 +217,7 @@ fn signed_add<'tcx, 'ccx>(
         CVarDef::new(4, "overflow_b".to_string(), CType::Bool),
         Some(
             Expression::vari(1).lt(Expression::constant(&"0".to_string()))
-                & Expression::vari(0)
-                    .lt(Expression::constant(&min_int_str) - Expression::vari(1)),
+                & Expression::vari(0).lt(Expression::constant(&min_int_str) - Expression::vari(1)),
         ),
     ));
     // (second > 0 && first > INT{bit_width}_MAX - second) | (second < 0 && first < INT{bit_width}_MIN - second)
@@ -187,7 +230,7 @@ fn signed_add<'tcx, 'ccx>(
 
     bb.push(Statement::from_expression(Expression::Return {
         value: Expression::strct(
-            Expression::constant(c_struct.get_name()),
+            Expression::constant(&c_struct.get_name()),
             vec![Expression::unbvari(2), Expression::unbvari(5)],
         ),
     }));
@@ -198,10 +241,11 @@ fn signed_add<'tcx, 'ccx>(
 fn unsigned_add<'tcx, 'ccx>(
     _fn_cx: &mut CodegenFunctionCx<'tcx, 'ccx>,
     fn_name: &String,
-    c_struct: &CStruct,
+    c_struct: &CStructDef,
+    return_type: CType,
 ) -> CFunction {
-    let return_type = CType::Struct(CStructInfo::new(c_struct.get_name()));
-    let sum_type = c_struct.get_field(0).get_type();
+    let field = c_struct.get_field(0);
+    let sum_type = field.get_type();
     let mut c_fn = CFunction::new(fn_name.clone(), return_type.clone());
 
     c_fn.add_signature_var(CVarDef::new(0, "first".to_string(), sum_type.clone()));
@@ -219,7 +263,7 @@ fn unsigned_add<'tcx, 'ccx>(
     // sum < first
     bb.push(Statement::from_expression(Expression::Return {
         value: Expression::strct(
-            Expression::constant(c_struct.get_name()),
+            Expression::constant(&c_struct.get_name()),
             vec![Expression::unbvari(2), Expression::unbvari(3)],
         ),
     }));
@@ -230,14 +274,23 @@ fn unsigned_add<'tcx, 'ccx>(
 fn signed_sub<'tcx, 'ccx>(
     fn_cx: &mut CodegenFunctionCx<'tcx, 'ccx>,
     fn_name: &String,
-    c_struct: &CStruct,
+    c_struct: &CStructDef,
+    return_type: CType,
 ) -> CFunction {
-    let return_type = CType::Struct(CStructInfo::new(c_struct.get_name()));
-    let difference_type = c_struct.get_field(0).get_type();
+    let field = c_struct.get_field(0);
+    let difference_type = field.get_type();
     let (max_int_str, min_int_str) = extremum_val_of_type(fn_cx, difference_type);
     let mut c_fn = CFunction::new(fn_name.clone(), return_type.clone());
-    c_fn.add_signature_var(CVarDef::new(0, "first".to_string(), difference_type.clone()));
-    c_fn.add_signature_var(CVarDef::new(1, "second".to_string(), difference_type.clone()));
+    c_fn.add_signature_var(CVarDef::new(
+        0,
+        "first".to_string(),
+        difference_type.clone(),
+    ));
+    c_fn.add_signature_var(CVarDef::new(
+        1,
+        "second".to_string(),
+        difference_type.clone(),
+    ));
     c_fn.add_var_decl(CVarDecl::new(
         CVarDef::new(2, "difference".to_string(), difference_type.clone()),
         Some(Expression::vari(0) - Expression::vari(1)),
@@ -247,8 +300,7 @@ fn signed_sub<'tcx, 'ccx>(
         CVarDef::new(3, "overflow_a".to_string(), CType::Bool),
         Some(
             Expression::vari(1).gt(Expression::constant(&"0".to_string()))
-                & Expression::vari(0)
-                    .lt(Expression::constant(&min_int_str) + Expression::vari(1)),
+                & Expression::vari(0).lt(Expression::constant(&min_int_str) + Expression::vari(1)),
         ),
     ));
     // second < 0 && first > INT{bit_width}_MAX + second
@@ -256,8 +308,7 @@ fn signed_sub<'tcx, 'ccx>(
         CVarDef::new(4, "overflow_b".to_string(), CType::Bool),
         Some(
             Expression::vari(1).lt(Expression::constant(&"0".to_string()))
-                & Expression::vari(0)
-                    .gt(Expression::constant(&max_int_str) + Expression::vari(1)),
+                & Expression::vari(0).gt(Expression::constant(&max_int_str) + Expression::vari(1)),
         ),
     ));
     //((second > 0 && first < INT{bit_width}_MIN + second) || (second < 0 && first > INT{bit_width}_MAX + second))
@@ -269,7 +320,7 @@ fn signed_sub<'tcx, 'ccx>(
     let mut bb = BasicBlock::new(BasicBlockIdentifier(0));
     bb.push(Statement::from_expression(Expression::Return {
         value: Expression::strct(
-            Expression::constant(c_struct.get_name()),
+            Expression::constant(&c_struct.get_name()),
             vec![Expression::unbvari(2), Expression::unbvari(5)],
         ),
     }));
@@ -280,14 +331,23 @@ fn signed_sub<'tcx, 'ccx>(
 fn unsigned_sub<'tcx, 'ccx>(
     _fn_cx: &mut CodegenFunctionCx<'tcx, 'ccx>,
     fn_name: &String,
-    c_struct: &CStruct,
+    c_struct: &CStructDef,
+    return_type: CType,
 ) -> CFunction {
-    let return_type = CType::Struct(CStructInfo::new(c_struct.get_name()));
-    let difference_type = c_struct.get_field(0).get_type();
+    let field = c_struct.get_field(0);
+    let difference_type = field.get_type();
     let mut c_fn = CFunction::new(fn_name.clone(), return_type.clone());
 
-    c_fn.add_signature_var(CVarDef::new(0, "first".to_string(), difference_type.clone()));
-    c_fn.add_signature_var(CVarDef::new(1, "second".to_string(), difference_type.clone()));
+    c_fn.add_signature_var(CVarDef::new(
+        0,
+        "first".to_string(),
+        difference_type.clone(),
+    ));
+    c_fn.add_signature_var(CVarDef::new(
+        1,
+        "second".to_string(),
+        difference_type.clone(),
+    ));
     c_fn.add_var_decl(CVarDecl::new(
         CVarDef::new(2, "difference".to_string(), difference_type.clone()),
         Some(Expression::vari(0) - Expression::vari(1)),
@@ -301,7 +361,7 @@ fn unsigned_sub<'tcx, 'ccx>(
     // first < second
     bb.push(Statement::from_expression(Expression::Return {
         value: Expression::strct(
-            Expression::constant(c_struct.get_name()),
+            Expression::constant(&c_struct.get_name()),
             vec![Expression::unbvari(2), Expression::unbvari(3)],
         ),
     }));
@@ -312,10 +372,11 @@ fn unsigned_sub<'tcx, 'ccx>(
 fn signed_mul<'tcx, 'ccx>(
     fn_cx: &mut CodegenFunctionCx<'tcx, 'ccx>,
     fn_name: &String,
-    c_struct: &CStruct,
+    c_struct: &CStructDef,
+    return_type: CType,
 ) -> CFunction {
-    let return_type = CType::Struct(CStructInfo::new(c_struct.get_name()));
-    let product_type = c_struct.get_field(0).get_type();
+    let field = c_struct.get_field(0);
+    let product_type = field.get_type();
     let mut c_fn = CFunction::new(fn_name.clone(), return_type.clone());
     let (max_int_str, min_int_str) = extremum_val_of_type(fn_cx, product_type);
 
@@ -347,8 +408,7 @@ fn signed_mul<'tcx, 'ccx>(
         Some(
             Expression::vari(0).gt(Expression::constant(&"0".to_string()))
                 & Expression::vari(1).gt(Expression::constant(&"0".to_string()))
-                & Expression::vari(0)
-                    .gt(Expression::constant(&max_int_str) / Expression::vari(1)),
+                & Expression::vari(0).gt(Expression::constant(&max_int_str) / Expression::vari(1)),
         ),
     ));
     // (a > 0 && b < 0 && b < INT{}_MIN / a)
@@ -357,8 +417,7 @@ fn signed_mul<'tcx, 'ccx>(
         Some(
             Expression::vari(0).gt(Expression::constant(&"0".to_string()))
                 & Expression::vari(1).lt(Expression::constant(&"0".to_string()))
-                & Expression::vari(1)
-                    .lt(Expression::constant(&min_int_str) / Expression::vari(0)),
+                & Expression::vari(1).lt(Expression::constant(&min_int_str) / Expression::vari(0)),
         ),
     ));
     // (a < 0 && b > 0 && a < INT{}_MIN / b)
@@ -367,8 +426,7 @@ fn signed_mul<'tcx, 'ccx>(
         Some(
             Expression::vari(0).lt(Expression::constant(&"0".to_string()))
                 & Expression::vari(1).gt(Expression::constant(&"0".to_string()))
-                & Expression::vari(0)
-                    .lt(Expression::constant(&min_int_str) / Expression::vari(1)),
+                & Expression::vari(0).lt(Expression::constant(&min_int_str) / Expression::vari(1)),
         ),
     ));
     // (a < 0 && b < 0 && a < INT{}_MAX / b)
@@ -377,8 +435,7 @@ fn signed_mul<'tcx, 'ccx>(
         Some(
             Expression::vari(0).lt(Expression::constant(&"0".to_string()))
                 & Expression::vari(1).lt(Expression::constant(&"0".to_string()))
-                & Expression::vari(0)
-                    .lt(Expression::constant(&max_int_str) / Expression::vari(1)),
+                & Expression::vari(0).lt(Expression::constant(&max_int_str) / Expression::vari(1)),
         ),
     ));
     c_fn.add_var_decl(CVarDecl::new(
@@ -397,7 +454,7 @@ fn signed_mul<'tcx, 'ccx>(
 
     bb.push(Statement::from_expression(Expression::Return {
         value: Expression::strct(
-            Expression::constant(c_struct.get_name()),
+            Expression::constant(&c_struct.get_name()),
             vec![Expression::unbvari(2), Expression::unbvari(9)],
         ),
     }));
@@ -409,10 +466,11 @@ fn signed_mul<'tcx, 'ccx>(
 fn unsigned_mul<'tcx, 'ccx>(
     _fn_cx: &mut CodegenFunctionCx<'tcx, 'ccx>,
     fn_name: &String,
-    c_struct: &CStruct,
+    c_struct: &CStructDef,
+    return_type: CType,
 ) -> CFunction {
-    let return_type = CType::Struct(CStructInfo::new(c_struct.get_name()));
-    let product_type = c_struct.get_field(0).get_type();
+    let field = c_struct.get_field(0);
+    let product_type = field.get_type();
     let mut c_fn = CFunction::new(fn_name.clone(), return_type.clone());
 
     c_fn.add_signature_var(CVarDef::new(0, "first".to_string(), product_type.clone()));
@@ -425,8 +483,7 @@ fn unsigned_mul<'tcx, 'ccx>(
         CVarDef::new(3, "overflow".to_string(), CType::Bool),
         Some(
             Expression::vari(0).neq(Expression::constant(&"0".to_string()))
-                & (Expression::vari(2)
-                    / (Expression::vari(0)).neq(Expression::vari(1))),
+                & (Expression::vari(2) / (Expression::vari(0)).neq(Expression::vari(1))),
         ),
     ));
 
@@ -434,7 +491,7 @@ fn unsigned_mul<'tcx, 'ccx>(
 
     bb.push(Statement::from_expression(Expression::Return {
         value: Expression::strct(
-            Expression::constant(c_struct.get_name()),
+            Expression::constant(&c_struct.get_name()),
             vec![Expression::unbvari(2), Expression::unbvari(3)],
         ),
     }));
