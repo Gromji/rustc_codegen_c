@@ -18,9 +18,6 @@ impl CVarDef {
     pub fn get_id(&self) -> usize {
         self.local_id
     }
-    pub fn same_type(&self, other: &CVarDef) -> bool {
-        self.ty == other.ty
-    }
     pub fn get_name(&self) -> String {
         self.name.clone()
     }

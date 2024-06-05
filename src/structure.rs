@@ -1,95 +1,123 @@
 use crate::{
-    crepr::{indent, Representable},
-    definition::CVarDef,
-    ty::CType,
+    crepr::{indent, Representable}, definition::CVarDef, ty::CType
 };
 use std::fmt::{self, Debug};
 
-#[derive(Clone)]
-pub struct CStruct {
-    name: String,
-    fields: Vec<CVarDef>,
+#[derive(Clone, PartialEq, Eq, Debug)]
+pub struct CStructDef {
+    pub name: String,
+    pub fields: Vec<CVarDef>,
 }
 
-impl CStruct {
-    pub fn new(name: String, fields: Option<Vec<CVarDef>>) -> Self {
-        match fields {
-            Some(fields) => Self { name, fields },
-            None => Self { name, fields: Vec::new() },
+impl CStructDef {
+    pub fn get_field(&self, idx: usize) -> CVarDef {
+        return self.fields[idx].clone();
+    }
+
+    pub fn get_name(&self) -> String {
+        return self.name.clone();
+    }
+}
+
+#[derive(Clone, PartialEq, Eq, Debug)]
+pub struct CTaggedUnionDef {
+    pub name: String,
+    pub tag: CVarDef,
+    pub union_var: CVarDef,
+}
+
+impl CTaggedUnionDef {
+    pub const TAG_NAME: &'static str = "tag";
+    pub const UNION_NAME: &'static str = "union_type";
+
+    pub fn new(name: String, tag_type: CType, union_type: CType) -> Self {
+        Self {
+            name,
+            tag: CVarDef::new(0, CTaggedUnionDef::TAG_NAME.to_string(), tag_type),
+            union_var: CVarDef::new(1, CTaggedUnionDef::UNION_NAME.to_string(), union_type),
+        }
+    }
+}
+
+#[derive(Clone, PartialEq, Eq)]
+pub enum CComposite {
+    Struct(CStructDef),
+    Union(CStructDef),
+    TaggedUnion(CTaggedUnionDef)
+}
+
+
+impl CComposite {
+    pub fn get_name(&self) -> String {
+        match self {
+            CComposite::Struct(s) | CComposite::Union(s) => s.get_name(),
+            CComposite::TaggedUnion(t) => t.name.clone(),
         }
     }
 
-    #[allow(dead_code)]
-    pub fn push(&mut self, field: CVarDef) {
-        self.fields.push(field);
-    }
-
-    pub fn get_name(&self) -> &String {
-        &self.name
-    }
-    pub fn get_field(&self, idx: usize) -> &CVarDef {
-        &self.fields[idx]
-    }
-
-    #[allow(dead_code)]
-    pub fn validate_struct(&self) -> bool {
-        todo!("TODO: Would be a good idea to have some kind of validation")
-    }
-}
-
-impl PartialEq for CStruct {
-    fn eq(&self, other: &CStruct) -> bool {
-        let mut result = true;
-        if self.fields.len() == other.fields.len() {
-            for (i, field) in self.fields.iter().enumerate() {
-                result &= field.same_type(&other.fields[i]);
-            }
-        } else {
-            result = false;
+    pub fn as_struct_def(&self) -> CStructDef {
+        match self {
+            CComposite::Struct(s) | CComposite::Union(s) => s.clone(),
+            _ => panic!("as_struct_def: not a struct type"),
         }
-        result
+    }
+
+    pub fn as_tagged_union_def(&self) -> CTaggedUnionDef {
+        match self {
+            CComposite::TaggedUnion(s) => s.clone(),
+
+            _ => panic!("as_union_def: not a tagged union type"),
+        }
     }
 }
 
-impl Debug for CStruct {
+
+impl Debug for CComposite {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         self.default_repr(f)
     }
 }
 
-impl Representable for CStruct {
+impl Representable for CComposite {
     fn repr(
         &self,
         f: &mut std::fmt::Formatter<'_>,
         context: &crate::crepr::RepresentationContext,
     ) -> std::fmt::Result {
-        write!(f, "typedef struct {{\n")?;
-        for field in &self.fields {
-            indent(f, context)?;
-            field.repr(f, context)?;
-            write!(f, ";\n")?;
+
+        match self {
+            CComposite::Struct(s) | CComposite::Union(s) => {
+                write!(f, "typedef ")?;
+                
+                match self {
+                    CComposite::Struct(_) => write!(f, "struct ")?,
+                    CComposite::Union(_) => write!(f, "union ")?,
+                    _ => unreachable!(),
+                }
+
+                write!(f, " {{\n")?;
+                for field in &s.fields {
+                    indent(f, context)?;
+                    field.repr(f, context)?;
+                    write!(f, ";\n")?;
+                }
+
+                write!(f, "}} {};", s.name)
+            }
+            
+            CComposite::TaggedUnion(t) => {
+                write!(f, "typedef struct  {{\n")?;
+
+                indent(f, context)?;
+                t.tag.repr(f, context)?;
+                write!(f, ";\n")?;
+
+                indent(f, context)?;
+                t.union_var.repr(f, context)?;
+                write!(f, ";\n")?;
+
+                write!(f, "}} {};", t.name)
+            },
         }
-        write!(f, "}} {};", self.name)
-    }
-}
-
-impl<'tcx> From<&Vec<CType>> for CStruct {
-    // We can change the way we name tuples, for now all that matters is its unique.
-    fn from(list: &Vec<CType>) -> Self {
-        let mut struct_name = String::from("s_");
-        for ty in list {
-            struct_name.push_str(&format!("{:?}", ty));
-        }
-
-        // TODO(@Luka) I hate having to do this, I think we should rework how structures get generated in general
-        // should work for now though :)
-        struct_name = struct_name.replace("*", "_PTR_");
-
-        let fields = list
-            .iter()
-            .enumerate()
-            .map(|(idx, ty)| CVarDef::new(idx, format!("field_{idx}"), ty.clone()))
-            .collect();
-        Self::new(struct_name, Some(fields))
     }
 }

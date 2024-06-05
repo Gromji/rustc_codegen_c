@@ -1,5 +1,7 @@
 // allow unused vars
 
+
+
 #![allow(unused_variables)]
 fn main() {
     let _a = 1;
@@ -21,6 +23,12 @@ fn main() {
 
     let a = test();
 
+    let a = test_enum(TestEnum::A(1, 2, 3));
+
+    let a = test_plain_enum(PlainEnum::A);
+
+    let a = test_plain_union(TestUnion { a: 1 });
+
     let a = add_many(a);
 
     let a = test_closure(a, a);
@@ -41,6 +49,45 @@ struct Te {
 struct Pair<T, U> {
     first: T,
     second: U,
+}
+
+enum TestEnum {
+    A(i32, i32, i32),
+    B(i32),
+    C,
+}
+
+enum PlainEnum {
+    A,
+    B,
+    C,
+}
+
+union TestUnion {
+    a: i32,
+    b: f32,
+}
+
+fn test_enum(a: TestEnum) -> i32 {
+    match a {
+        TestEnum::A(a, b, c) => a + b + c,
+        TestEnum::B(_) => 0,
+        TestEnum::C => 1,
+    }
+}
+
+fn test_plain_enum(a: PlainEnum) -> i32 {
+    match a {
+        PlainEnum::A => 0,
+        PlainEnum::B => 1,
+        PlainEnum::C => 2,
+    }
+}
+
+fn test_plain_union(a: TestUnion) -> i32 {
+    unsafe {
+        return a.a;
+    }
 }
 
 fn test() -> i32 {

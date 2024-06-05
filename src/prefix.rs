@@ -4,7 +4,7 @@ use crate::definition::CVarDef;
 use crate::function::CFunction;
 
 use crate::include::Include;
-use crate::structure::CStruct;
+use crate::structure::CComposite;
 use crate::ty::CIntTy;
 use crate::ty::CType;
 
@@ -80,13 +80,7 @@ fn prefix_functions() -> Vec<CFunction> {
 }
 
 // List of starter structs
-fn prefix_structs() -> Vec<CStruct> {
-    let mut structs: Vec<CStruct> = Vec::new();
-
-    // create an unit struct
-    let unit_struct = CStruct::new("__Unit".to_string(), None);
-
-    structs.push(unit_struct);
-
+fn prefix_structs() -> Vec<CComposite> {
+    let structs: Vec<CComposite> = Vec::new();
     structs
 }
