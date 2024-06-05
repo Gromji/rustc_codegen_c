@@ -21,6 +21,7 @@ use rustc_data_structures::fx::FxIndexMap;
 use rustc_metadata::EncodedMetadata;
 use rustc_session::Session;
 use std::{any::Any, path::Path};
+use tracing::debug;
 
 mod aggregate;
 mod base;
@@ -89,7 +90,8 @@ impl CodegenBackend for CCodegenBackend {
         };
         use std::io::Write;
         let crate_name = codegen_results.crate_info.local_crate_name;
-        let output_name = out_filename(sess, CrateType::Executable, &outputs, crate_name);
+        let mut output_name = out_filename(sess, CrateType::Executable, &outputs, crate_name);
+
         match output_name {
             OutFileName::Real(ref path) => {
                 let tmp_c_path = codegen_results.modules[0].object.as_ref().unwrap();
@@ -112,7 +114,8 @@ impl CodegenBackend for CCodegenBackend {
                 let h_cont = std::fs::read_to_string(tmp_h_path_).unwrap();
 
                 stdout.write_all(c_cont.as_bytes()).unwrap();
-                stdout.write_all(h_cont.as_bytes()).unwrap();
+
+                debug!("Files to remove: {} {}", tmp_c_path_.display(), tmp_h_path_.display());
 
                 // remove tmp_path
                 std::fs::remove_file(tmp_c_path_).unwrap();

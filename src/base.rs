@@ -23,7 +23,9 @@ use rustc_middle::ty::print::with_no_trimmed_paths;
 use rustc_session::config::{CrateType, OutFileName, OutputFilenames, OutputType};
 use rustc_session::output::out_filename;
 use std::path::Path;
+use tracing::debug;
 use tracing_subscriber::util::SubscriberInitExt;
+use tracing_subscriber::EnvFilter;
 
 use crate::function;
 use crate::header;
@@ -169,9 +171,6 @@ impl OngoingCodegen {
         crate_info: CrateInfo,
         output_files: &OutputFilenames,
     ) -> CodegenResults {
-        let output_name =
-            out_filename(sess, CrateType::Executable, &output_files, crate_info.local_crate_name);
-
         let c_name = format!("{}.c", name);
         let h_name = format!("{}.h", name);
         let c_path: std::path::PathBuf =
@@ -181,18 +180,12 @@ impl OngoingCodegen {
         let mut c_file = std::fs::File::create(&c_path).unwrap();
         let mut h_file = std::fs::File::create(&h_path).unwrap();
 
-        match output_name {
-            OutFileName::Real(path) => {
-                self.context.get_mut_c_includes().push(include::Include::new(
-                    format!(
-                        "{}.h",
-                        String::from(Path::new(&path).file_name().unwrap().to_str().unwrap()),
-                    ),
-                    false,
-                ))
-            }
-            _ => (),
-        }
+        debug!("Files created: {} {}", c_path.display(), h_path.display());
+
+        self.context.get_mut_c_includes().push(include::Include::new(
+            format!("{}.h", crate_info.local_crate_name.to_string()),
+            false,
+        ));
 
         write::write_includes(
             self.context.get_c_includes(),
@@ -279,9 +272,9 @@ pub fn run<'tcx>(
         std::collections::HashMap::new();
 
     tracing_subscriber::FmtSubscriber::builder()
+        .with_env_filter(EnvFilter::from_default_env())
         .with_line_number(true)
         .without_time()
-        .with_max_level(tracing::Level::DEBUG)
         .finish()
         .init();
 
