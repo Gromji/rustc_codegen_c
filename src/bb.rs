@@ -291,7 +291,7 @@ pub fn handle_bbs<'tcx, 'ccx>(fn_cx: &mut CodegenFunctionCx<'tcx, 'ccx>, c_fn: &
         let block_data: &BasicBlockData = block_data;
         let bb_id = BasicBlockIdentifier(bb_id);
 
-        let statements: &Vec<rustc_middle::mir::Statement<'_>> = &block_data.statements;
+        let statements: &Vec<rustc_middle::mir::Statement<'tcx>> = &block_data.statements;
 
         debug!("Basic Block: {:?}", bb_id);
 
