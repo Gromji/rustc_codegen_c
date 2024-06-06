@@ -20,9 +20,7 @@ use rustc_codegen_ssa::{CodegenResults, CompiledModule, CrateInfo};
 use rustc_metadata::EncodedMetadata;
 use rustc_middle::mir::mono::{CodegenUnit, MonoItem};
 use rustc_middle::ty::print::with_no_trimmed_paths;
-use rustc_session::config::{CrateType, OutFileName, OutputFilenames, OutputType};
-use rustc_session::output::out_filename;
-use std::path::Path;
+use rustc_session::config::{OutputFilenames, OutputType};
 use tracing::debug;
 use tracing_subscriber::util::SubscriberInitExt;
 use tracing_subscriber::EnvFilter;
@@ -165,7 +163,7 @@ pub struct OngoingCodegen {
 impl OngoingCodegen {
     pub fn join(
         &mut self,
-        sess: &rustc_session::Session,
+        _sess: &rustc_session::Session,
         name: String,
         metadata: EncodedMetadata,
         crate_info: CrateInfo,

@@ -4,10 +4,10 @@ build:
 # example: make compile FILE_PATH=/tmp/main.rs
 # in this case output file(s) will go in /tmp
 compile: $(FILE_PATH)
-	rustc $< -Z codegen-backend=./target/release/librustc_codegen_c.so --out-dir $(dir $<)
+	rustc -A warnings $< -Z codegen-backend=./target/release/librustc_codegen_c.so --out-dir $(dir $<)
 
 compile_stdout: $(FILE_PATH)
-	rustc -o - $< -Z codegen-backend=./target/release/librustc_codegen_c.so --out-dir $(dir $<)
+	RUST_LOG=debug C_CODEGEN_COMMENTS=EXCLUDE rustc -A warnings -o - $< -Z codegen-backend=./target/release/librustc_codegen_c.so --out-dir $(dir $<)
 
 # run tests with llvm's filecheck tool
 test: tests/test_*.rs
@@ -33,6 +33,9 @@ test: tests/test_*.rs
 	if [ $$passed_tests -ne $$total_tests ]; then \
 		exit 1; \
 	fi
+
+clean_tests:
+	rm -f ./tests/*.c ./tests/*.h
 
 clean:
 	cargo clean

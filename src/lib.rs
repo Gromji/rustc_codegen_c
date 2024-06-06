@@ -90,7 +90,7 @@ impl CodegenBackend for CCodegenBackend {
         };
         use std::io::Write;
         let crate_name = codegen_results.crate_info.local_crate_name;
-        let mut output_name = out_filename(sess, CrateType::Executable, &outputs, crate_name);
+        let output_name = out_filename(sess, CrateType::Executable, &outputs, crate_name);
 
         match output_name {
             OutFileName::Real(ref path) => {
@@ -111,7 +111,6 @@ impl CodegenBackend for CCodegenBackend {
                 let tmp_h_path_ = Path::new(tmp_h_path);
 
                 let c_cont = std::fs::read_to_string(tmp_c_path_).unwrap();
-                let h_cont = std::fs::read_to_string(tmp_h_path_).unwrap();
 
                 stdout.write_all(c_cont.as_bytes()).unwrap();
 

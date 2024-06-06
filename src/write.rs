@@ -13,8 +13,7 @@ pub fn write_includes(
     h_file: &mut File,
 ) {
     let includes = c_inc.iter().map(|i| format!("{:?}", i)).collect::<Vec<String>>();
-    let header_includes =
-        h_inc.iter().map(|i| format!("{:?}", i)).collect::<Vec<String>>();
+    let header_includes = h_inc.iter().map(|i| format!("{:?}", i)).collect::<Vec<String>>();
 
     c_file.write_all(includes.join("\n").as_bytes()).unwrap();
     h_file.write_all(header_includes.join("\n").as_bytes()).unwrap();
