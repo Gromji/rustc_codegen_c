@@ -1,7 +1,7 @@
 #![crate_type = "lib"]
 
 #[no_mangle]
-// CHECK-LABEL: test_unsigned_int
+// CHECK-LABEL: test_unsigned_int() {
 fn test_unsigned_int() -> (u8, u16, u32, u64, u128) {
     // CHECK: uint8_t {{[a-zA-Z0-9_]+}};
     let b8: u8 = 0;

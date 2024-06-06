@@ -1,7 +1,7 @@
 #![crate_type = "lib"]
 
 #[no_mangle]
-// CHECK-LABEL: test_float
+// CHECK-LABEL: test_float() {
 fn test_float() -> (f32, f64) {
     // CHECK: float {{[a-zA-Z0-9_]+}};
     let a = 1.0;

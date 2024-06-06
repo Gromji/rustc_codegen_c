@@ -1,7 +1,7 @@
 #![crate_type = "lib"]
 
 #[no_mangle]
-// CHECK-LABEL: test_array
+// CHECK-LABEL: test_array() {
 fn test_array() -> i32 {
     // CHECK: int32_t {{[a-zA-Z0-9_]+}}[3];
     let a = [1, 2, 3];

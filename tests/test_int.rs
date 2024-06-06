@@ -1,7 +1,7 @@
 #![crate_type = "lib"]
 
 #[no_mangle]
-// CHECK-LABEL: test_signed_int
+// CHECK-LABEL: test_signed_int() {
 fn test_signed_int() -> (i8, i16, i32, i64, i128) {
     // CHECK: int8_t {{[a-zA-Z0-9_]+}};
     let b8: i8 = 0;
