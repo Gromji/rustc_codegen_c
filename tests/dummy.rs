@@ -49,6 +49,20 @@ struct Pair<T, U> {
     second: U,
 }
 
+impl<T, V> Pair<T, V> {
+    fn new(first: T, second: V) -> Pair<T, V> {
+        Pair { first, second }
+    }
+
+    fn get_first(&self) -> &T {
+        &self.first
+    }
+
+    fn get_second(&self) -> &V {
+        &self.second
+    }
+}
+
 enum TestEnum {
     A(i32, i32, i32),
     B(i32),
@@ -92,8 +106,8 @@ fn test() -> i32 {
     let mut t: Te;
     t = Te { a: 7, b: 8, pair: Pair { first: 128, second: true } };
     t.pair.first = 10;
-    let p: Pair<i32, bool> = Pair { first: 128, second: true };
-    let p2 = Pair { first: false, second: true };
+    let p: Pair<i32, bool> = Pair::new(128, false);
+    let p2 = Pair::new(false,p.get_second());
     let k = 5;
     let pair = (128, t);
     let unkonwn = (128, true, 1.0);
