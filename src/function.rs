@@ -22,7 +22,7 @@ pub struct CodegenFunctionCx<'tcx, 'ccx> {
     pub tcx: rustc_middle::ty::TyCtxt<'tcx>,
     pub mir: &'ccx rustc_middle::mir::Body<'tcx>,
     pub ongoing_codegen: &'ccx mut OngoingCodegen,
-    
+
     instance: Instance<'tcx>,
     pub(crate) ty_to_c: &'ccx mut std::collections::HashMap<ty::Ty<'tcx>, CType>,
 }
@@ -210,10 +210,12 @@ pub fn handle_fn<'tcx, 'ccx>(
     inst: Instance<'tcx>,
     rust_to_c_map: &'ccx mut std::collections::HashMap<ty::Ty<'tcx>, CType>,
 ) {
-    let mir = tcx.instance_mir(inst.def);
-    
     // this resolves generic parameters to concrete types
-    let mono_mir = inst.instantiate_mir_and_normalize_erasing_regions(tcx, ty::ParamEnv::reveal_all(), ty::EarlyBinder::bind(mir.clone()));
+    let mono_mir = inst.instantiate_mir_and_normalize_erasing_regions(
+        tcx,
+        ty::ParamEnv::reveal_all(),
+        ty::EarlyBinder::bind(tcx.instance_mir(inst.def).clone()),
+    );
 
     let mut fn_cx = CodegenFunctionCx {
         tcx,
@@ -229,7 +231,7 @@ pub fn handle_fn<'tcx, 'ccx>(
     );
 
     // Pring mir of function for debugging
-    print_mir(tcx, mir);
+    print_mir(tcx, &mono_mir);
 
     // Handle local variables
     handle_decls(&mut fn_cx, &mut c_fn);
