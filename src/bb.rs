@@ -96,7 +96,6 @@ fn handle_function_call<'tcx, 'ccx>(
     args: Vec<Spanned<Operand<'tcx>>>,
     destination: rustc_middle::mir::Place<'tcx>,
 ) -> Statement {
-    
     let _span = debug_span!("handle_function_call").entered();
     debug!("Function call: {:?}, args {:?}", func, args);
 
@@ -189,7 +188,7 @@ pub fn handle_terminator<'tcx, 'ccx>(
 
         TerminatorKind::Return => {
             let stmt = Statement::from_expression(Expression::Return {
-                value: Expression::vari(0) // hardcoded 0 value, since return values are always index 0
+                value: Expression::vari(0), // hardcoded 0 value, since return values are always index 0
             });
 
             return vec![stmt];
@@ -229,7 +228,7 @@ pub fn handle_terminator<'tcx, 'ccx>(
             return vec![stmt];
         }
 
-        TerminatorKind::FalseUnwind { real_target, ..} => {
+        TerminatorKind::FalseUnwind { real_target, .. } => {
             // unwind can be ignored
             let stmt = Statement::from_expression(Expression::Goto {
                 target: BasicBlockIdentifier(real_target.as_usize()),
@@ -238,7 +237,7 @@ pub fn handle_terminator<'tcx, 'ccx>(
             return vec![stmt];
         }
 
-        TerminatorKind::Assert { cond, expected, msg: _,  target, .. } => {
+        TerminatorKind::Assert { cond, expected, msg: _, target, .. } => {
             /*  TODO we could ignore asserts, implement them with the assert define or allow the user to provide custom implementations to handle them.
                 I personally think the latter would be best and would allow us to side-step other similar issues.
                 We would have a default implementation that would use the assert macro, but the user could provide their own implementation.
@@ -270,6 +269,38 @@ pub fn handle_terminator<'tcx, 'ccx>(
             });
 
             return vec![stmt];
+        }
+
+        TerminatorKind::InlineAsm { template, operands, options, line_spans, targets, unwind } => {
+            debug!(
+                "InlineAsm: {:?}, Operands: {:?}, Options: {:?}, Line Spans: {:?}, Targets: {:?}, Unwind: {:?}",
+                template, operands, options, line_spans, targets, unwind
+            );
+
+            template
+                .iter()
+                .flat_map(|piece| match piece {
+                    rustc_ast::ast::InlineAsmTemplatePiece::String(s) => {
+                        if s.trim().is_empty() {
+                            return vec![];
+                        }
+                        vec![Statement::from_expression(Expression::InlineAsm { asm: s.clone() })]
+                    }
+
+                    rustc_ast::ast::InlineAsmTemplatePiece::Placeholder {
+                        operand_idx: _,
+                        modifier: _,
+                        span: _,
+                    } => {
+                        // let operand = operands[*operand_idx];
+
+                        // let expr = handle_operand(fn_cx, &operand);
+
+                        // vec![Statement::from_expression(Expression::InlineAsm { asm: () })]
+                        panic!("Unimplemented InlineAsm Placeholder");
+                    }
+                })
+                .collect()
         }
 
         _ => {
