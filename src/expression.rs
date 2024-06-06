@@ -67,7 +67,7 @@ impl From<&rustc_middle::mir::BinOp> for BinOpType {
 }
 
 impl Representable for BinOpType {
-    fn repr(&self, f: &mut fmt::Formatter<'_>, _context: &RepresentationContext) -> fmt::Result {
+    fn repr(&self, f: &mut (dyn fmt::Write), _context: &RepresentationContext) -> fmt::Result {
         match self {
             BinOpType::Add => write!(f, "+"),
             BinOpType::Sub => write!(f, "-"),
@@ -126,7 +126,7 @@ pub enum UnaryOpType {
 }
 
 impl Representable for UnaryOpType {
-    fn repr(&self, f: &mut fmt::Formatter<'_>, _context: &RepresentationContext) -> fmt::Result {
+    fn repr(&self, f: &mut (dyn fmt::Write), _context: &RepresentationContext) -> fmt::Result {
         match self {
             UnaryOpType::Neg => write!(f, "-"),
             UnaryOpType::Not => write!(f, "!"),
@@ -140,7 +140,7 @@ pub enum VariableAccess {
     Reference,
     Dereference,
     Field { name: String },
-    Index { idx: usize },
+    Index { expression: Expression },
     Cast { ty: CType },
 }
 
@@ -249,7 +249,7 @@ impl Expression {
     pub fn arr_vari(local: usize, idx: usize) -> Box<Expression> {
         Box::new(Expression::Variable {
             local,
-            access: vec![VariableAccess::Index { idx }],
+            access: vec![VariableAccess::Index { expression: Expression::const_int(idx as i128) }],
         })
     }
     pub fn vari(local: usize) -> Box<Expression> {
@@ -263,6 +263,12 @@ impl Expression {
     }
     pub fn strct(name: Box<Expression>, fields: Vec<Expression>) -> Box<Expression> {
         Box::new(Expression::Struct { name, fields })
+    }
+
+    pub fn const_int(value: i128) -> Expression {
+        Expression::Constant {
+            value: value.to_string(),
+        }
     }
 }
 impl Add for Box<Expression> {
@@ -333,7 +339,7 @@ impl BitAnd for Box<Expression> {
 }
 
 impl Representable for Expression {
-    fn repr(&self, f: &mut fmt::Formatter<'_>, context: &RepresentationContext) -> fmt::Result {
+    fn repr(&self, f: &mut (dyn fmt::Write), context: &RepresentationContext) -> fmt::Result {
         match self {
             Expression::Constant { value } => {
                 write!(f, "{}", value)
@@ -362,13 +368,12 @@ impl Representable for Expression {
                             var_repr = format! {"{}.{}", var_repr, name};
                         }
 
-                        VariableAccess::Index { idx } => {
-                            var_repr = format! {"{}[{}]", var_repr, idx};
+                        VariableAccess::Index { expression } => {
+                            var_repr = format! {"{}[{}]", var_repr, expression.repr_str(context)};
                         }
 
                         VariableAccess::Cast { ty } => {
-                            // the :? is a bit of a hack, but it should work for now
-                            var_repr = format!("(({:?}){})", ty, var_repr);
+                            var_repr = format!("(({}){})", ty.repr_str(context), var_repr);
                         }
                     }
                 }

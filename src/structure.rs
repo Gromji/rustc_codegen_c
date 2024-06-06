@@ -81,7 +81,7 @@ impl Debug for CComposite {
 impl Representable for CComposite {
     fn repr(
         &self,
-        f: &mut std::fmt::Formatter<'_>,
+        f: &mut (dyn fmt::Write),
         context: &crate::crepr::RepresentationContext,
     ) -> std::fmt::Result {
 

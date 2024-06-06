@@ -42,7 +42,7 @@ impl CType {
 impl Representable for CType {
     fn repr(
         &self,
-        f: &mut fmt::Formatter<'_>,
+        f: &mut (dyn fmt::Write),
         context: &crate::crepr::RepresentationContext,
     ) -> fmt::Result {
         match self {
@@ -131,16 +131,13 @@ impl Representable for CType {
                 // Change this later.
                 let child_context: RepresentationContext = Default::default();
                 ty.repr(f, &child_context)?;
-                if *size as u32 == 0 {
-                    match &context.var_name {
-                        Some(name) => write!(f, " {}[]", name),
-                        None => panic!("Variable must have a name"),
-                    }
+
+                if context.n_ptr > 0 {
+                    write!(f, "{} {}", "*".repeat(context.n_ptr.into()), context.get_variable_name())
+                } else if *size as u32 == 0 {
+                    write!(f, " {}[]", context.get_variable_name())
                 } else {
-                    match &context.var_name {
-                        Some(name) => write!(f, " {}[{}]", name, size),
-                        None => panic!("Variable must have a name"),
-                    }
+                    write!(f, " {}[{}]", context.get_variable_name(), size)
                 }
             }
             CType::FunctionPtr(func_info) => {
@@ -546,7 +543,7 @@ impl<'tcx> CodegenFunctionCx<'tcx, '_> {
 
             rustc_middle::ty::Ref(_, ty, _) => CType::Pointer(Box::new(self.rust_to_c_type(ty))),
 
-            rustc_middle::ty::Slice(_ty) => panic!("Slices are not supported yet"),
+            rustc_middle::ty::Slice(ty) => self.rust_to_c_type(ty),
 
             rustc_middle::ty::Array(ty, size) => CType::Array(
                 Box::new(self.rust_to_c_type(ty)),

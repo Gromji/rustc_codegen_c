@@ -21,7 +21,7 @@ pub struct CDefine {
 impl Representable for CDefine {
     fn repr(
         &self,
-        f: &mut fmt::Formatter<'_>,
+        f: &mut (dyn fmt::Write),
         _context: &crate::crepr::RepresentationContext,
     ) -> fmt::Result {
         write!(f, "#define {} {}", self.name, self.value)

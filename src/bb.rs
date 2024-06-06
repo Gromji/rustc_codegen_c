@@ -16,7 +16,7 @@ pub struct BasicBlockIdentifier(pub usize);
 impl Representable for BasicBlockIdentifier {
     fn repr(
         &self,
-        f: &mut std::fmt::Formatter<'_>,
+        f: &mut (dyn fmt::Write),
         _context: &crate::crepr::RepresentationContext,
     ) -> std::fmt::Result {
         write!(f, "bb{}", self.0)
@@ -58,7 +58,7 @@ impl BasicBlock {
 impl Representable for BasicBlock {
     fn repr(
         &self,
-        f: &mut std::fmt::Formatter<'_>,
+        f: &mut (dyn fmt::Write),
         context: &crate::crepr::RepresentationContext,
     ) -> std::fmt::Result {
         indent(f, context)?;

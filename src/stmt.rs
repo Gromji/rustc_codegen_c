@@ -32,7 +32,7 @@ impl Statement {
 }
 
 impl Representable for Statement {
-    fn repr(&self, f: &mut fmt::Formatter<'_>, context: &RepresentationContext) -> fmt::Result {
+    fn repr(&self, f: &mut (dyn fmt::Write), context: &RepresentationContext) -> fmt::Result {
         if context.include_comments {
             if let Some(comment) = &self.comment {
                 indent(f, context)?;
@@ -126,11 +126,13 @@ pub fn handle_place<'tcx, 'ccx>(
                 }
             }
             rustc_middle::mir::ProjectionElem::Index(idx_local) => {
-                access.push(VariableAccess::Index { idx: idx_local.as_usize() })
+                access.push(VariableAccess::Index { expression: Expression::unbvari(idx_local.as_usize())})
             }
+
             rustc_middle::mir::ProjectionElem::ConstantIndex { offset, .. } => {
-                access.push(VariableAccess::Index { idx: offset as usize })
+                access.push(VariableAccess::Index { expression: Expression::const_int(offset as i128)});
             }
+
             rustc_middle::mir::ProjectionElem::Subslice { .. } => {
                 todo!("Subslice")
             }

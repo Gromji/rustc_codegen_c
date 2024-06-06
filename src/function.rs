@@ -49,7 +49,7 @@ impl<'tcx> CodegenFunctionCx<'tcx, '_> {
 }
 
 impl Representable for CFunction {
-    fn repr(&self, f: &mut fmt::Formatter<'_>, context: &RepresentationContext) -> fmt::Result {
+    fn repr(&self, f: &mut (dyn fmt::Write), context: &RepresentationContext) -> fmt::Result {
         let mut new_context = context.clone();
         new_context.cur_fn = Some(&self);
         self.return_ty.repr(f, &new_context)?;
