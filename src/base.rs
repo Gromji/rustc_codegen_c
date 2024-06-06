@@ -21,7 +21,9 @@ use rustc_metadata::EncodedMetadata;
 use rustc_middle::mir::mono::{CodegenUnit, MonoItem};
 use rustc_middle::ty::print::with_no_trimmed_paths;
 use rustc_session::config::{OutputFilenames, OutputType};
+use tracing::debug;
 use tracing_subscriber::util::SubscriberInitExt;
+use tracing_subscriber::EnvFilter;
 
 use crate::function;
 use crate::header;
@@ -52,18 +54,18 @@ impl Context {
         }
     }
 
-    pub fn get_includes(&self) -> &Vec<include::Include> {
+    pub fn get_c_includes(&self) -> &Vec<include::Include> {
         &self.includes
     }
 
-    pub fn get_mut_includes(&mut self) -> &mut Vec<include::Include> {
+    pub fn get_mut_c_includes(&mut self) -> &mut Vec<include::Include> {
         &mut self.includes
     }
-    pub fn get_header_includes(&self) -> &Vec<include::Include> {
+    pub fn get_h_includes(&self) -> &Vec<include::Include> {
         &self.header_includes
     }
 
-    pub fn get_mut_header_includes(&mut self) -> &mut Vec<include::Include> {
+    pub fn get_mut_h_includes(&mut self) -> &mut Vec<include::Include> {
         &mut self.header_includes
     }
     pub fn get_defines(&self) -> &Vec<header::CDefine> {
@@ -113,10 +115,7 @@ impl Context {
 
         let name = composite.get_name();
 
-        return CCompositeInfo {
-            name,
-            ctx_idx: struct_idx,
-        };
+        return CCompositeInfo { name, ctx_idx: struct_idx };
     }
 
     pub fn get_composite(&self, info: &CCompositeInfo) -> CComposite {
@@ -163,55 +162,60 @@ pub struct OngoingCodegen {
 
 impl OngoingCodegen {
     pub fn join(
-        &self,
+        &mut self,
+        _sess: &rustc_session::Session,
         name: String,
-        ongoing_codegen: &OngoingCodegen,
         metadata: EncodedMetadata,
         crate_info: CrateInfo,
         output_files: &OutputFilenames,
     ) -> CodegenResults {
-        let path = output_files.temp_path(OutputType::Object, Some(name.as_str()));
-        let header_name = format!("{}_h", name);
-        let header_path = output_files.temp_path(OutputType::Object, Some(header_name.as_str()));
+        let c_name = format!("{}.c", name);
+        let h_name = format!("{}.h", name);
+        let c_path: std::path::PathBuf =
+            output_files.temp_path(OutputType::Object, Some(c_name.as_str()));
+        let h_path = output_files.temp_path(OutputType::Object, Some(h_name.as_str()));
 
-        let mut file = std::fs::File::create(&path).unwrap();
-        let mut header_file = std::fs::File::create(&header_path).unwrap();
+        let mut c_file = std::fs::File::create(&c_path).unwrap();
+        let mut h_file = std::fs::File::create(&h_path).unwrap();
+
+        debug!("Files created: {} {}", c_path.display(), h_path.display());
+
+        self.context.get_mut_c_includes().push(include::Include::new(
+            format!("{}.h", crate_info.local_crate_name.to_string()),
+            false,
+        ));
 
         write::write_includes(
-            ongoing_codegen.context.get_includes(),
-            ongoing_codegen.context.get_header_includes(),
-            &mut file,
-            &mut header_file,
+            self.context.get_c_includes(),
+            self.context.get_h_includes(),
+            &mut c_file,
+            &mut h_file,
         );
 
-        write::write_defines(ongoing_codegen.context.get_defines(), &mut header_file);
+        write::write_defines(self.context.get_defines(), &mut h_file);
 
-        write::write_structs(ongoing_codegen.context.get_structs(), &mut header_file);
+        write::write_structs(self.context.get_structs(), &mut h_file);
 
-        write::write_prototypes(ongoing_codegen.context.get_functions(), &mut header_file);
+        write::write_prototypes(self.context.get_functions(), &mut h_file);
 
-        write::write_functions(ongoing_codegen.context.get_functions(), &mut file, false);
+        write::write_functions(self.context.get_functions(), &mut c_file, false);
 
-        write::write_functions(
-            ongoing_codegen.context.get_header_functions(),
-            &mut header_file,
-            true,
-        );
+        write::write_functions(self.context.get_header_functions(), &mut h_file, true);
 
         let modules = vec![
             CompiledModule {
-                name: name,
+                name: c_name,
                 kind: rustc_codegen_ssa::ModuleKind::Regular,
-                object: Some(path),
+                object: Some(c_path),
                 bytecode: None,
                 dwarf_object: None,
                 assembly: None,
                 llvm_ir: None,
             },
             CompiledModule {
-                name: header_name,
+                name: h_name,
                 kind: rustc_codegen_ssa::ModuleKind::Metadata,
-                object: Some(header_path),
+                object: Some(h_path),
                 bytecode: None,
                 dwarf_object: None,
                 assembly: None,
@@ -261,16 +265,14 @@ pub fn run<'tcx>(
     metadata: rustc_metadata::EncodedMetadata,
 ) -> Box<(String, OngoingCodegen, EncodedMetadata, CrateInfo)> {
     let cgus: Vec<_> = tcx.collect_and_partition_mono_items(()).1.iter().collect();
-    let mut ongoing_codegen = Box::new(OngoingCodegen {
-        context: Context::new(),
-    });
+    let mut ongoing_codegen = Box::new(OngoingCodegen { context: Context::new() });
     let mut rust_to_c_map: std::collections::HashMap<rustc_middle::ty::Ty<'tcx>, CType> =
         std::collections::HashMap::new();
 
     tracing_subscriber::FmtSubscriber::builder()
+        .with_env_filter(EnvFilter::from_default_env())
         .with_line_number(true)
         .without_time()
-        .with_max_level(tracing::Level::DEBUG)
         .finish()
         .init();
 
@@ -283,10 +285,5 @@ pub fn run<'tcx>(
 
     let name: String = cgus.iter().next().unwrap().name().to_string();
 
-    Box::new((
-        name,
-        *ongoing_codegen,
-        metadata,
-        CrateInfo::new(tcx, "c".to_string()),
-    ))
+    Box::new((name, *ongoing_codegen, metadata, CrateInfo::new(tcx, "c".to_string())))
 }

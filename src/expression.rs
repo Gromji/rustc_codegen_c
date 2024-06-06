@@ -67,7 +67,7 @@ impl From<&rustc_middle::mir::BinOp> for BinOpType {
 }
 
 impl Representable for BinOpType {
-    fn repr(&self, f: &mut fmt::Formatter<'_>, _context: &RepresentationContext) -> fmt::Result {
+    fn repr(&self, f: &mut (dyn fmt::Write), _context: &RepresentationContext) -> fmt::Result {
         match self {
             BinOpType::Add => write!(f, "+"),
             BinOpType::Sub => write!(f, "-"),
@@ -126,7 +126,7 @@ pub enum UnaryOpType {
 }
 
 impl Representable for UnaryOpType {
-    fn repr(&self, f: &mut fmt::Formatter<'_>, _context: &RepresentationContext) -> fmt::Result {
+    fn repr(&self, f: &mut (dyn fmt::Write), _context: &RepresentationContext) -> fmt::Result {
         match self {
             UnaryOpType::Neg => write!(f, "-"),
             UnaryOpType::Not => write!(f, "!"),
@@ -140,7 +140,7 @@ pub enum VariableAccess {
     Reference,
     Dereference,
     Field { name: String },
-    Index { idx: usize },
+    Index { expression: Expression },
     Cast { ty: CType },
 }
 
@@ -204,136 +204,95 @@ pub enum Expression {
         function: Box<Expression>,
         args: Vec<Expression>,
     },
+    InlineAsm {
+        asm: String,
+    },
 }
 impl Expression {
     /// Returns Expression::Assignment
     pub fn assign(&self, rhs: Box<Expression>) -> Expression {
-        Expression::Assignment {
-            lhs: Box::new(self.clone()),
-            rhs,
-        }
+        Expression::Assignment { lhs: Box::new(self.clone()), rhs }
     }
     pub fn gt(&self, rhs: Box<Expression>) -> Box<Expression> {
-        Box::new(Expression::BinaryOp {
-            op: BinOpType::Gt,
-            lhs: Box::new(self.clone()),
-            rhs,
-        })
+        Box::new(Expression::BinaryOp { op: BinOpType::Gt, lhs: Box::new(self.clone()), rhs })
     }
     pub fn lt(&self, rhs: Box<Expression>) -> Box<Expression> {
-        Box::new(Expression::BinaryOp {
-            op: BinOpType::Lt,
-            lhs: Box::new(self.clone()),
-            rhs,
-        })
+        Box::new(Expression::BinaryOp { op: BinOpType::Lt, lhs: Box::new(self.clone()), rhs })
     }
     pub fn neq(&self, rhs: Box<Expression>) -> Box<Expression> {
-        Box::new(Expression::BinaryOp {
-            op: BinOpType::Ne,
-            lhs: Box::new(self.clone()),
-            rhs,
-        })
+        Box::new(Expression::BinaryOp { op: BinOpType::Ne, lhs: Box::new(self.clone()), rhs })
     }
     pub fn equ(&self, rhs: Box<Expression>) -> Box<Expression> {
-        Box::new(Expression::BinaryOp {
-            op: BinOpType::Eq,
-            lhs: Box::new(self.clone()),
-            rhs,
-        })
+        Box::new(Expression::BinaryOp { op: BinOpType::Eq, lhs: Box::new(self.clone()), rhs })
     }
     pub fn constant(value: &String) -> Box<Expression> {
-        Box::new(Expression::Constant {
-            value: value.clone(),
-        })
+        Box::new(Expression::Constant { value: value.clone() })
     }
     pub fn arr_vari(local: usize, idx: usize) -> Box<Expression> {
         Box::new(Expression::Variable {
             local,
-            access: vec![VariableAccess::Index { idx }],
+            access: vec![VariableAccess::Index { expression: Expression::const_int(idx as i128) }],
         })
     }
     pub fn vari(local: usize) -> Box<Expression> {
         Box::new(Expression::unbvari(local))
     }
     pub fn unbvari(local: usize) -> Expression {
-        Expression::Variable {
-            local,
-            access: Vec::new(),
-        }
+        Expression::Variable { local, access: Vec::new() }
     }
     pub fn strct(name: Box<Expression>, fields: Vec<Expression>) -> Box<Expression> {
         Box::new(Expression::Struct { name, fields })
+    }
+
+    pub fn const_int(value: i128) -> Expression {
+        Expression::Constant { value: value.to_string() }
     }
 }
 impl Add for Box<Expression> {
     type Output = Self;
 
     fn add(self, rhs: Self) -> Self {
-        Box::new(Expression::BinaryOp {
-            op: BinOpType::Add,
-            lhs: self,
-            rhs,
-        })
+        Box::new(Expression::BinaryOp { op: BinOpType::Add, lhs: self, rhs })
     }
 }
 impl Sub for Box<Expression> {
     type Output = Self;
 
     fn sub(self, rhs: Self) -> Self {
-        Box::new(Expression::BinaryOp {
-            op: BinOpType::Sub,
-            lhs: self,
-            rhs,
-        })
+        Box::new(Expression::BinaryOp { op: BinOpType::Sub, lhs: self, rhs })
     }
 }
 impl Mul for Box<Expression> {
     type Output = Self;
 
     fn mul(self, rhs: Self) -> Self {
-        Box::new(Expression::BinaryOp {
-            op: BinOpType::Mul,
-            lhs: self,
-            rhs,
-        })
+        Box::new(Expression::BinaryOp { op: BinOpType::Mul, lhs: self, rhs })
     }
 }
 impl Div for Box<Expression> {
     type Output = Self;
 
     fn div(self, rhs: Self) -> Self {
-        Box::new(Expression::BinaryOp {
-            op: BinOpType::Div,
-            lhs: self,
-            rhs,
-        })
+        Box::new(Expression::BinaryOp { op: BinOpType::Div, lhs: self, rhs })
     }
 }
 impl BitOr for Box<Expression> {
     type Output = Self;
 
     fn bitor(self, rhs: Self) -> Self {
-        Box::new(Expression::BinaryOp {
-            op: BinOpType::Or,
-            lhs: self,
-            rhs,
-        })
+        Box::new(Expression::BinaryOp { op: BinOpType::Or, lhs: self, rhs })
     }
 }
 impl BitAnd for Box<Expression> {
     type Output = Self;
 
     fn bitand(self, rhs: Self) -> Self {
-        Box::new(Expression::BinaryOp {
-            op: BinOpType::And,
-            lhs: self,
-            rhs,
-        })
+        Box::new(Expression::BinaryOp { op: BinOpType::And, lhs: self, rhs })
     }
 }
 
 impl Representable for Expression {
-    fn repr(&self, f: &mut fmt::Formatter<'_>, context: &RepresentationContext) -> fmt::Result {
+    fn repr(&self, f: &mut (dyn fmt::Write), context: &RepresentationContext) -> fmt::Result {
         match self {
             Expression::Constant { value } => {
                 write!(f, "{}", value)
@@ -362,13 +321,12 @@ impl Representable for Expression {
                             var_repr = format! {"{}.{}", var_repr, name};
                         }
 
-                        VariableAccess::Index { idx } => {
-                            var_repr = format! {"{}[{}]", var_repr, idx};
+                        VariableAccess::Index { expression } => {
+                            var_repr = format! {"{}[{}]", var_repr, expression.repr_str(context)};
                         }
 
                         VariableAccess::Cast { ty } => {
-                            // the :? is a bit of a hack, but it should work for now
-                            var_repr = format!("(({:?}){})", ty, var_repr);
+                            var_repr = format!("(({}){})", ty.repr_str(context), var_repr);
                         }
                     }
                 }
@@ -460,11 +418,7 @@ impl Representable for Expression {
                 Ok(())
             }
 
-            Expression::SwitchJump {
-                value,
-                cases,
-                default,
-            } => {
+            Expression::SwitchJump { value, cases, default } => {
                 write!(f, "switch (")?;
                 value.repr(f, context)?;
                 write!(f, ")")?;
@@ -507,6 +461,10 @@ impl Representable for Expression {
                 }
                 write!(f, ")")?;
                 Ok(())
+            }
+
+            Expression::InlineAsm { asm } => {
+                write!(f, "asm(\"{}\")", asm)
             }
         }
     }

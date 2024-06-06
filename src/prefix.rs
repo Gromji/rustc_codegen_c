@@ -10,13 +10,10 @@ use crate::ty::CType;
 
 use crate::expression::Expression;
 use crate::stmt::Statement;
-use crate::HEADER_FILE_NAME;
 
 pub fn build_prefix(context: &mut Context) {
-    // Includes
-    context.get_mut_includes().append(&mut prefix_includes());
     // Header Includes
-    context.get_mut_header_includes().append(&mut prefix_header_includes());
+    context.get_mut_h_includes().append(&mut prefix_header_includes());
     // Functions
     context.get_mut_functions().append(&mut prefix_functions());
     // Structs
@@ -46,9 +43,6 @@ fn prefix_header_includes() -> Vec<Include> {
         Include::new("uchar.h".to_string(), true),
         Include::new("complex.h".to_string(), true),
     ]
-}
-fn prefix_includes() -> Vec<Include> {
-    vec![Include::new(HEADER_FILE_NAME.to_string(), false)]
 }
 
 // List of starter functions

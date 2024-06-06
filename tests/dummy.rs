@@ -1,7 +1,5 @@
 // allow unused vars
 
-
-
 #![allow(unused_variables)]
 fn main() {
     let _a = 1;
@@ -114,7 +112,7 @@ fn test() -> i32 {
     let pair = (128, t);
     let unkonwn = (128, true, 1.0);
     let l: [i32; 3] = [1, 2, 3];
-    let o = 0..1;
+    let o: std::ops::Range<i32> = 0..1;
 
     return 5;
 }

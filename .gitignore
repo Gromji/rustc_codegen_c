@@ -1,4 +1,6 @@
 /target
 *.c
+*.h
+*.o
+*.out
 .vscode
-tests/header_file.h

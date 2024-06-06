@@ -11,7 +11,7 @@ pub struct Include {
 impl Representable for Include {
     fn repr(
         &self,
-        f: &mut fmt::Formatter<'_>,
+        f: &mut (dyn fmt::Write),
         _context: &crate::crepr::RepresentationContext,
     ) -> fmt::Result {
         if self.is_system {

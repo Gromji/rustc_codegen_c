@@ -9,7 +9,7 @@ crate-type=["dylib"]
 [dependencies]
 # tidy-alphabetical-start
 tracing = {version = "0.1.40", log = true, log-always = true}
-tracing-subscriber = "0.3"
+tracing-subscriber = { version = "0.3", features = ["env-filter", "std"] }
 # tidy-alphabetical-end
 
 [package.metadata.rust-analyzer]

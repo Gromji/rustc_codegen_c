@@ -7,17 +7,16 @@ use crate::structure;
 
 // Write includes to the file
 pub fn write_includes(
-    includes: &Vec<include::Include>,
-    header_includes: &Vec<include::Include>,
-    file: &mut File,
-    header_file: &mut File,
+    c_inc: &Vec<include::Include>,
+    h_inc: &Vec<include::Include>,
+    c_file: &mut File,
+    h_file: &mut File,
 ) {
-    let includes = includes.iter().map(|i| format!("{:?}", i)).collect::<Vec<String>>();
-    let header_includes =
-        header_includes.iter().map(|i| format!("{:?}", i)).collect::<Vec<String>>();
+    let includes = c_inc.iter().map(|i| format!("{:?}", i)).collect::<Vec<String>>();
+    let header_includes = h_inc.iter().map(|i| format!("{:?}", i)).collect::<Vec<String>>();
 
-    file.write_all(includes.join("\n").as_bytes()).unwrap();
-    header_file.write_all(header_includes.join("\n").as_bytes()).unwrap();
+    c_file.write_all(includes.join("\n").as_bytes()).unwrap();
+    h_file.write_all(header_includes.join("\n").as_bytes()).unwrap();
 }
 
 // Write Defines
