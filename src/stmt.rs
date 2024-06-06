@@ -71,7 +71,7 @@ impl Debug for Statement {
 pub fn handle_stmt<'tcx, 'ccx>(
     fn_cx: &mut CodegenFunctionCx<'tcx, 'ccx>,
     c_fn: &CFunction,
-    stmt: &'tcx rustc_middle::mir::Statement<'tcx>,
+    stmt: &'ccx rustc_middle::mir::Statement<'tcx>,
 ) -> Statement {
     let span = debug_span!("handle_stmt").entered();
 
@@ -210,7 +210,7 @@ fn handle_assign<'tcx, 'ccx>(
     fn_cx: &mut CodegenFunctionCx<'tcx, 'ccx>,
     c_fn: &CFunction,
     place: &Place<'tcx>,
-    rvalue: &'tcx Rvalue<'tcx>,
+    rvalue: &'ccx Rvalue<'tcx>,
 ) -> Expression {
     let span = debug_span!("handle_assign").entered();
     debug!("place( {:?} )", place);

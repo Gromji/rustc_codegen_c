@@ -335,21 +335,17 @@ impl<'tcx> CodegenFunctionCx<'tcx, '_> {
 
     /// This function might need to be changed further down the line to ensure that the names are truly unique and that we dont exceed any size lim
     /// TODO: cosnider hashing? would make the generated file a lot less readable though, so perhaps set to a flag so it doesn't annoy us during development
-    fn composite_name(&self, def: DefId, field_names: &Vec<String>) -> String {
+    fn composite_name(&self, def: DefId) -> String {
         // it's improtant to preserve information before :: to avoid conflicts with types from other crates, if we ever get around to that
 
-        let mut name = self.tcx.def_path_str(def).replace("::", "__");
-
-        for generic_name in field_names {
-            name.push_str(&format!("_{}", generic_name));
-        }
+        let name = self.tcx.def_path_str(def).replace("::", "__");
 
         return name;
     }
 
     // this is will also need to be changed
-    fn wrapper_union_name(&self, def: DefId, field_names: &Vec<String>) -> String {
-        let name = self.composite_name(def, field_names);
+    fn wrapper_union_name(&self, def: DefId) -> String {
+        let name = self.composite_name(def);
 
         "__WRAPPER_UNION_".to_string() + &name
     }
@@ -402,13 +398,8 @@ impl<'tcx> CodegenFunctionCx<'tcx, '_> {
 
             rustc_middle::ty::Adt(adt_def, generic_fields) => match adt_def.adt_kind() {
                 rustc_middle::ty::AdtKind::Struct => {
-                    let field_names: Vec<String> = generic_fields
-                        .iter()
-                        .map(|x| format!("{}", x.as_type().unwrap()))
-                        .collect();
-
                     let c_struct = CStructDef {
-                        name: self.composite_name(adt_def.did(), &field_names),
+                        name: self.composite_name(adt_def.did()),
                         fields: adt_def
                             .all_fields()
                             .enumerate()
@@ -431,13 +422,8 @@ impl<'tcx> CodegenFunctionCx<'tcx, '_> {
                 }
 
                 rustc_middle::ty::AdtKind::Union => {
-                    let field_names: Vec<String> = generic_fields
-                        .iter()
-                        .map(|x| format!("{}", x.as_type().unwrap()))
-                        .collect();
-
                     let c_struct = CStructDef {
-                        name: self.composite_name(adt_def.did(), &field_names),
+                        name: self.composite_name(adt_def.did()),
                         fields: adt_def
                             .all_fields()
                             .enumerate()
@@ -457,7 +443,7 @@ impl<'tcx> CodegenFunctionCx<'tcx, '_> {
                         .add_composite(&CComposite::Union(c_struct));
 
                     return CType::Union(struct_info);
-                },
+                }
 
                 rustc_middle::ty::AdtKind::Enum => {
                     let mut variant_infos: Vec<CVarDef> = Vec::new();
@@ -474,10 +460,7 @@ impl<'tcx> CodegenFunctionCx<'tcx, '_> {
 
                         // build and save structs for each of the enum variants
                         let c_struct = CStructDef {
-                            name: self.composite_name(
-                                variant.def_id,
-                                &variant_fields.iter().map(|x| format!("{:?}", x)).collect(),
-                            ),
+                            name: self.composite_name(variant.def_id),
                             fields: variant_fields
                                 .iter()
                                 .enumerate()
@@ -502,13 +485,7 @@ impl<'tcx> CodegenFunctionCx<'tcx, '_> {
 
                     // create the actual union as a type
                     let union_def = CStructDef {
-                        name: self.wrapper_union_name(
-                            adt_def.did(),
-                            &variant_infos
-                                .iter()
-                                .map(|x| x.get_name().clone())
-                                .collect::<Vec<String>>(),
-                        ),
+                        name: self.wrapper_union_name(adt_def.did()),
                         fields: variant_infos,
                     };
 
@@ -519,13 +496,8 @@ impl<'tcx> CodegenFunctionCx<'tcx, '_> {
 
                     let discr_type = self.rust_to_c_type(&ty.discriminant_ty(self.tcx));
 
-                    let generic_field_names: Vec<String> = generic_fields
-                        .iter()
-                        .map(|x| format!("{}", x.as_type().unwrap()))
-                        .collect();
-
                     let tagged_union_def = CTaggedUnionDef::new(
-                        self.composite_name(adt_def.did(), &generic_field_names),
+                        self.composite_name(adt_def.did()),
                         discr_type,
                         CType::Union(union_info),
                     );
