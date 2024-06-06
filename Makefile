@@ -18,7 +18,7 @@ test: tests/test_*.rs
 	for file in $^; do \
 	\
 	\
-		C_CODEGEN_COMMENTS=EXCLUDE rustc -A warnings -o - $$file -Z codegen-backend=./target/release/librustc_codegen_c.so --out-dir ./tests/ | cat | FileCheck-11 $$file; \
+		C_CODEGEN_COMMENTS=EXCLUDE rustc -A warnings -o - $$file -Z codegen-backend=./target/release/librustc_codegen_c.so --out-dir ./tests/ | cat | FileCheck-14 $$file; \
 	\
 	\
 		if [ $$? -eq 0 ]; then \
