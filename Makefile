@@ -7,7 +7,7 @@ compile: $(FILE_PATH)
 	rustc -A warnings $< -Z codegen-backend=./target/release/librustc_codegen_c.so --out-dir $(dir $<)
 
 compile_stdout: $(FILE_PATH)
-	RUST_LOG=debug C_CODEGEN_COMMENTS=EXCLUDE rustc -A warnings -o - $< -Z codegen-backend=./target/release/librustc_codegen_c.so --out-dir $(dir $<)
+	C_CODEGEN_COMMENTS=EXCLUDE rustc -A warnings -o - $< -Z codegen-backend=./target/release/librustc_codegen_c.so --out-dir $(dir $<)
 
 # run tests with llvm's filecheck tool
 test: tests/test_*.rs
