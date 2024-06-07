@@ -43,7 +43,11 @@ impl Representable for Statement {
         if let Some(expression) = &self.expression {
             indent(f, context)?;
             expression.repr(f, context)?;
-            write!(f, ";")?;
+
+            if !matches!(expression, Expression::NoOp {}) {
+                write!(f, ";")?;
+            }
+
             if context.include_newline {
                 write!(f, "\n")?;
             }
@@ -70,7 +74,15 @@ pub fn handle_stmt<'tcx, 'ccx>(
     debug!("Kind: {:?}", stmt.kind);
 
     let expression = match &stmt.kind {
-        StatementKind::Assign(val) => handle_assign(fn_cx, c_fn, &val.0, &val.1),
+        StatementKind::Assign(val) => {
+            let exp = handle_assign(fn_cx, c_fn, &val.0, &val.1);
+
+            if let Expression::Assignment { lhs: _, rhs } = &exp {
+                if matches!(**rhs, Expression::NoOp {}) { Expression::NoOp {} } else { exp }
+            } else {
+                exp
+            }
+        }
 
         _ => Expression::NoOp {},
     };
@@ -126,11 +138,15 @@ pub fn handle_place<'tcx, 'ccx>(
                 }
             }
             rustc_middle::mir::ProjectionElem::Index(idx_local) => {
-                access.push(VariableAccess::Index { expression: Expression::unbvari(idx_local.as_usize())})
+                access.push(VariableAccess::Index {
+                    expression: Expression::unbvari(idx_local.as_usize()),
+                })
             }
 
             rustc_middle::mir::ProjectionElem::ConstantIndex { offset, .. } => {
-                access.push(VariableAccess::Index { expression: Expression::const_int(offset as i128)});
+                access.push(VariableAccess::Index {
+                    expression: Expression::const_int(offset as i128),
+                });
             }
 
             rustc_middle::mir::ProjectionElem::Subslice { .. } => {
@@ -270,6 +286,11 @@ fn handle_assign<'tcx, 'ccx>(
             } else {
                 unreachable!("non variable for handle_place")
             }
+        }
+
+        Rvalue::Repeat(operand, len) => {
+            debug!("Assign REPEAT: {:?} {:?}. Ignoring", operand, len);
+            Expression::NoOp {}
         }
 
         _ => {

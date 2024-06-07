@@ -106,6 +106,10 @@ impl CFunction {
         self.basic_blocks.push(bb);
     }
 
+    pub fn clear_bb(&mut self) {
+        self.basic_blocks.clear();
+    }
+
     pub fn as_prototype(&self) -> String {
         let mut prototype = format!("{:?} {}(", self.return_ty, self.name);
         for (i, arg) in self.signature.iter().enumerate() {

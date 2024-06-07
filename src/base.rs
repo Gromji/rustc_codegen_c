@@ -198,9 +198,9 @@ impl OngoingCodegen {
 
         write::write_prototypes(self.context.get_functions(), &mut h_file);
 
-        write::write_functions(self.context.get_functions(), &mut c_file, false);
+        write::write_functions(self.context.get_mut_functions(), &mut c_file, false);
 
-        write::write_functions(self.context.get_header_functions(), &mut h_file, true);
+        write::write_functions(self.context.get_mut_header_functions(), &mut h_file, true);
 
         let modules = vec![
             CompiledModule {
