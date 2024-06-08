@@ -52,13 +52,23 @@ impl Representable for CFunction {
     fn repr(&self, f: &mut (dyn fmt::Write), context: &RepresentationContext) -> fmt::Result {
         let mut new_context = context.clone();
         new_context.cur_fn = Some(&self);
-        self.return_ty.repr(f, &new_context)?;
+
+        let mut ctx_ret_clone = new_context.clone();
+        ctx_ret_clone.func_sig_var = true;
+        ctx_ret_clone.var_name = Some("".to_string());
+
+        self.return_ty.repr(f, &ctx_ret_clone)?;
+
         write!(f, " {}(", self.name)?;
+
+        let mut ctx_arg_clone = new_context.clone();
+        ctx_arg_clone.func_sig_var = true;
+
         for (i, arg) in self.signature.iter().enumerate() {
             if i > 0 {
                 write!(f, ", ")?;
             }
-            arg.repr(f, &new_context)?;
+            arg.repr(f, &ctx_arg_clone)?;
         }
         write!(f, ") ")?;
 
@@ -182,6 +192,7 @@ fn handle_decls<'tcx>(ctx: &mut CodegenFunctionCx<'tcx, '_>, c_fn: &mut CFunctio
         set.insert(arg.index());
 
         let c_var = CVarDef::new(arg.index(), name, ctx.rust_to_c_type(&ty));
+
         c_fn.add_signature_var(c_var);
     });
 

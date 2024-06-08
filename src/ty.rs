@@ -128,12 +128,14 @@ impl Representable for CType {
                 ty.repr(f, &child_context)
             }
             CType::Array(ty, size) => {
-                // Change this later.
-                let child_context: RepresentationContext = Default::default();
+                let mut child_context: RepresentationContext = (*context).clone();
+                child_context.var_name = Some("".to_string());
                 ty.repr(f, &child_context)?;
 
-                if context.n_ptr > 0 {
-                    write!(f, "{} {}", "*".repeat(context.n_ptr.into()), context.get_variable_name())
+                debug!("context {:?}", context);
+
+                if context.func_sig_var {
+                    write!(f, "*{}", context.get_variable_name())
                 } else if *size as u32 == 0 {
                     write!(f, " {}[]", context.get_variable_name())
                 } else {
@@ -311,10 +313,7 @@ pub struct CCompositeInfo {
 
 impl CCompositeInfo {
     pub fn new(name: &String, ctx_idx: usize) -> Self {
-        Self {
-            name: name.clone(),
-            ctx_idx,
-        }
+        Self { name: name.clone(), ctx_idx }
     }
 }
 
@@ -385,10 +384,8 @@ impl<'tcx> CodegenFunctionCx<'tcx, '_> {
                         .collect(),
                 };
 
-                let struct_info = self
-                    .ongoing_codegen
-                    .context
-                    .add_composite(&CComposite::Struct(c_struct));
+                let struct_info =
+                    self.ongoing_codegen.context.add_composite(&CComposite::Struct(c_struct));
 
                 return CType::Struct(struct_info);
             }
@@ -410,10 +407,8 @@ impl<'tcx> CodegenFunctionCx<'tcx, '_> {
                             .collect(),
                     };
 
-                    let struct_info = self
-                        .ongoing_codegen
-                        .context
-                        .add_composite(&CComposite::Struct(c_struct));
+                    let struct_info =
+                        self.ongoing_codegen.context.add_composite(&CComposite::Struct(c_struct));
 
                     return CType::Struct(struct_info);
                 }
@@ -434,10 +429,8 @@ impl<'tcx> CodegenFunctionCx<'tcx, '_> {
                             .collect(),
                     };
 
-                    let struct_info = self
-                        .ongoing_codegen
-                        .context
-                        .add_composite(&CComposite::Union(c_struct));
+                    let struct_info =
+                        self.ongoing_codegen.context.add_composite(&CComposite::Union(c_struct));
 
                     return CType::Union(struct_info);
                 }
@@ -486,10 +479,8 @@ impl<'tcx> CodegenFunctionCx<'tcx, '_> {
                         fields: variant_infos,
                     };
 
-                    let union_info = self
-                        .ongoing_codegen
-                        .context
-                        .add_composite(&CComposite::Union(union_def));
+                    let union_info =
+                        self.ongoing_codegen.context.add_composite(&CComposite::Union(union_def));
 
                     let discr_type = self.rust_to_c_type(&ty.discriminant_ty(self.tcx));
 
@@ -517,28 +508,19 @@ impl<'tcx> CodegenFunctionCx<'tcx, '_> {
 
             rustc_middle::ty::Slice(ty) => self.rust_to_c_type(ty),
 
-            rustc_middle::ty::Array(ty, size) => CType::Array(
-                Box::new(self.rust_to_c_type(ty)),
-                utils::const_to_usize(size),
-            ),
+            rustc_middle::ty::Array(ty, size) => {
+                CType::Array(Box::new(self.rust_to_c_type(ty)), utils::const_to_usize(size))
+            }
 
             rustc_middle::ty::FnPtr(s) => {
-                let sig = self
-                    .tcx
-                    .normalize_erasing_late_bound_regions(ParamEnv::reveal_all(), *s);
+                let sig = self.tcx.normalize_erasing_late_bound_regions(ParamEnv::reveal_all(), *s);
 
-                let inputs: Vec<CType> = sig
-                    .inputs()
-                    .iter()
-                    .map(|ty| self.rust_to_c_type(ty))
-                    .collect();
+                let inputs: Vec<CType> =
+                    sig.inputs().iter().map(|ty| self.rust_to_c_type(ty)).collect();
 
                 let output = self.rust_to_c_type(&sig.output());
 
-                CType::FunctionPtr(Box::new(CFuncPtrInfo {
-                    args: inputs,
-                    ret: Box::new(output),
-                }))
+                CType::FunctionPtr(Box::new(CFuncPtrInfo { args: inputs, ret: Box::new(output) }))
             }
 
             _ => CType::from(ty),
@@ -554,12 +536,12 @@ impl<'tcx> From<&Ty<'tcx>> for CType {
             rustc_middle::ty::Bool => CType::Bool,
             rustc_middle::ty::Char => CType::Char,
             rustc_middle::ty::Str => CType::Array(Box::new(CType::Char), 0),
-            rustc_middle::ty::Uint(u) => CType::UInt(CUIntTy::from(
-                u.bit_width().unwrap_or(CUIntTy::DEFAULT_BIT_WIDTH),
-            )),
-            rustc_middle::ty::Int(i) => CType::Int(CIntTy::from(
-                i.bit_width().unwrap_or(CIntTy::DEFAULT_BIT_WIDTH),
-            )),
+            rustc_middle::ty::Uint(u) => {
+                CType::UInt(CUIntTy::from(u.bit_width().unwrap_or(CUIntTy::DEFAULT_BIT_WIDTH)))
+            }
+            rustc_middle::ty::Int(i) => {
+                CType::Int(CIntTy::from(i.bit_width().unwrap_or(CIntTy::DEFAULT_BIT_WIDTH)))
+            }
             rustc_middle::ty::Float(float) => CType::Float(CFloatTy::from(float.bit_width())),
 
             _ => {

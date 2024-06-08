@@ -6,7 +6,9 @@ use crate::header::handle_checked_op;
 use crate::structure::CTaggedUnionDef;
 use crate::ty::CType;
 use crate::utils;
-use rustc_middle::mir::{BinOp, ConstOperand, ConstValue, Operand, Place, Rvalue, StatementKind};
+use rustc_middle::mir::{
+    BinOp, CastKind, ConstOperand, ConstValue, Operand, Place, Rvalue, StatementKind,
+};
 use rustc_middle::ty::{ParamEnv, Ty};
 use std::fmt::{self, Debug};
 use tracing::{debug, debug_span, error, span, warn};
@@ -293,6 +295,11 @@ fn handle_assign<'tcx, 'ccx>(
             Expression::NoOp {}
         }
 
+        Rvalue::Cast(kind, operand, ty) => {
+            debug!("Assign CAST: {:?} {:?} {:?}", kind, operand, ty);
+            handle_cast(fn_cx, kind, operand, ty)
+        }
+
         _ => {
             warn!("Unhandled rvalue: {:?}", rvalue);
             Expression::NoOp {}
@@ -305,6 +312,35 @@ fn handle_assign<'tcx, 'ccx>(
         lhs: Box::new(handle_place(fn_cx, place)),
         rhs: Box::new(expression),
     };
+}
+
+pub fn handle_cast<'tcx, 'ccx>(
+    fn_cx: &mut CodegenFunctionCx<'tcx, 'ccx>,
+    kind: &CastKind,
+    operand: &Operand<'tcx>,
+    ty: &Ty<'tcx>,
+) -> Expression {
+    debug!("Cast type: {:?}", kind);
+    debug!("Operand: {:?}", operand);
+    debug!("Type: {:?}", ty);
+
+    let operand = handle_operand(fn_cx, operand);
+
+    match kind {
+        CastKind::PointerExposeProvenance => todo!("Unhandled cast: {:?}", kind),
+        CastKind::PointerWithExposedProvenance => todo!("Unhandled cast: {:?}", kind),
+        CastKind::PointerCoercion(_) => todo!("Unhandled cast: {:?}", kind),
+        CastKind::DynStar => todo!("Unhandled cast: {:?}", kind),
+        CastKind::IntToInt
+        | CastKind::FloatToInt
+        | CastKind::FloatToFloat
+        | CastKind::IntToFloat => {
+            Expression::Cast { ty: fn_cx.rust_to_c_type(ty), value: Box::new(operand) }
+        }
+        CastKind::PtrToPtr => todo!("Unhandled cast: {:?}", kind),
+        CastKind::FnPtrToPtr => todo!("Unhandled cast: {:?}", kind),
+        CastKind::Transmute => todo!("Unhandled cast: {:?}", kind),
+    }
 }
 
 pub fn handle_constant<'tcx, 'ccx>(

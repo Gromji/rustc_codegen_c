@@ -207,6 +207,10 @@ pub enum Expression {
     InlineAsm {
         asm: String,
     },
+    Cast {
+        ty: CType,
+        value: Box<Expression>,
+    },
 }
 impl Expression {
     /// Returns Expression::Assignment
@@ -465,6 +469,12 @@ impl Representable for Expression {
 
             Expression::InlineAsm { asm } => {
                 write!(f, "asm(\"{}\")", asm)
+            }
+            Expression::Cast { ty, value } => {
+                write!(f, "(")?;
+                ty.repr(f, context)?;
+                write!(f, ")")?;
+                value.repr(f, context)
             }
         }
     }

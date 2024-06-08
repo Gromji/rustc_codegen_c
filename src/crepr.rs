@@ -17,6 +17,7 @@ pub struct RepresentationContext<'ctx> {
     pub var_name: Option<String>,
     pub cur_fn: Option<&'ctx CFunction>,
     pub n_ptr: u8,
+    pub func_sig_var: bool,
 }
 
 impl RepresentationContext<'_> {
