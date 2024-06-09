@@ -19,6 +19,7 @@ pub struct CFunction {
     signature: Vec<CVarDef>,
     local_decl: Vec<CVarDecl>,
     basic_blocks: Vec<BasicBlock>,
+    is_main: bool,
     return_ty: CType,
 }
 
@@ -125,28 +126,28 @@ impl<'tcx> CodegenFunctionCx<'tcx, '_> {
 }
 
 impl Representable for CFunction {
-    fn repr(&self, f: &mut (dyn fmt::Write), context: &RepresentationContext) -> fmt::Result {
+    fn repr(&self, f: &mut (dyn fmt::Write), context: &mut RepresentationContext) -> fmt::Result {
         let mut new_context = context.clone();
         new_context.cur_fn = Some(&self);
-        self.return_ty.repr(f, &new_context)?;
+        self.return_ty.repr(f, &mut new_context)?;
         write!(f, " {}(", self.name)?;
         for (i, arg) in self.signature.iter().enumerate() {
             if i > 0 {
                 write!(f, ", ")?;
             }
-            arg.repr(f, &new_context)?;
+            arg.repr(f, &mut new_context)?;
         }
         write!(f, ") ")?;
 
         write!(f, "{{\n")?;
         for decl in &self.local_decl {
             indent(f, &new_context)?;
-            decl.repr(f, &new_context)?;
+            decl.repr(f, &mut new_context)?;
             write!(f, "\n")?;
         }
 
         for bb in self.basic_blocks.iter() {
-            bb.repr(f, &new_context)?;
+            bb.repr(f, &mut new_context)?;
         }
 
         write!(f, "}}")
@@ -166,12 +167,13 @@ impl CFunction {
             signature: Vec::new(),
             local_decl: Vec::new(),
             basic_blocks: Vec::new(),
+            is_main: false,
             return_ty: return_ty,
         }
     }
 
     pub fn is_main(&self) -> bool {
-        self.name == "main"
+        self.is_main
     }
 
     pub fn get_name(&self) -> &str {
@@ -180,6 +182,10 @@ impl CFunction {
 
     pub fn push_bb(&mut self, bb: BasicBlock) {
         self.basic_blocks.push(bb);
+    }
+
+    pub fn clear_bb(&mut self) {
+        self.basic_blocks.clear();
     }
 
     pub fn as_prototype(&self) -> String {
@@ -254,6 +260,7 @@ fn handle_decls<'tcx>(ctx: &mut CodegenFunctionCx<'tcx, '_>, c_fn: &mut CFunctio
         set.insert(arg.index());
 
         let c_var = CVarDef::new(arg.index(), name, ctx.rust_to_c_type(&ty));
+
         c_fn.add_signature_var(c_var);
     });
 
@@ -309,6 +316,8 @@ pub fn handle_fn<'tcx, 'ccx>(
         format_fn_name(&tcx.symbol_name(inst)),
         fn_cx.rust_to_c_type(&mono_mir.return_ty()),
     );
+
+    c_fn.is_main = inst.to_string() == "main";
 
     // Pring mir of function for debugging
     print_mir(tcx, &mono_mir);

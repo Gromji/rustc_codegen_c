@@ -68,7 +68,7 @@ impl From<&rustc_middle::mir::BinOp> for BinOpType {
 }
 
 impl Representable for BinOpType {
-    fn repr(&self, f: &mut (dyn fmt::Write), _context: &RepresentationContext) -> fmt::Result {
+    fn repr(&self, f: &mut (dyn fmt::Write), _context: &mut RepresentationContext) -> fmt::Result {
         match self {
             BinOpType::Add => write!(f, "+"),
             BinOpType::Sub => write!(f, "-"),
@@ -127,7 +127,7 @@ pub enum UnaryOpType {
 }
 
 impl Representable for UnaryOpType {
-    fn repr(&self, f: &mut (dyn fmt::Write), _context: &RepresentationContext) -> fmt::Result {
+    fn repr(&self, f: &mut (dyn fmt::Write), _context: &mut RepresentationContext) -> fmt::Result {
         match self {
             UnaryOpType::Neg => write!(f, "-"),
             UnaryOpType::Not => write!(f, "!"),
@@ -208,6 +208,10 @@ pub enum Expression {
     },
     InlineAsm {
         asm: String,
+    },
+    Cast {
+        ty: CType,
+        value: Box<Expression>,
     },
 }
 impl Expression {
@@ -355,7 +359,7 @@ impl BitAnd for Box<Expression> {
 }
 
 impl Representable for Expression {
-    fn repr(&self, f: &mut (dyn fmt::Write), context: &RepresentationContext) -> fmt::Result {
+    fn repr(&self, f: &mut (dyn fmt::Write), context: &mut RepresentationContext) -> fmt::Result {
         match self {
             Expression::Constant { value } => {
                 write!(f, "{}", value)
@@ -398,7 +402,7 @@ impl Representable for Expression {
 
                             var_repr = format!(
                                 "({} ({}.{}))",
-                                ty.repr_str(&ch_ctx),
+                                ty.repr_str(&mut ch_ctx),
                                 var_repr,
                                 FAT_PTR_DATA_FIELD
                             );
@@ -544,6 +548,12 @@ impl Representable for Expression {
 
             Expression::InlineAsm { asm } => {
                 write!(f, "asm(\"{}\")", asm)
+            }
+            Expression::Cast { ty, value } => {
+                write!(f, "(")?;
+                ty.repr(f, context)?;
+                write!(f, ")")?;
+                value.repr(f, context)
             }
         }
     }
