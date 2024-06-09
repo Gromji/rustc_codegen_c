@@ -9,7 +9,8 @@ use crate::utils;
 use rustc_middle::mir::{
     BinOp, CastKind, ConstOperand, ConstValue, Operand, Place, Rvalue, StatementKind,
 };
-use rustc_middle::ty::{ParamEnv, Ty};
+use rustc_middle::ty::adjustment::PointerCoercion;
+use rustc_middle::ty::{ParamEnv, Ty, TyKind};
 use std::fmt::{self, Debug};
 use tracing::{debug, debug_span, error, span, warn};
 
@@ -21,15 +22,24 @@ pub struct Statement {
 
 impl Statement {
     pub fn new(expression: Expression, comment: String) -> Self {
-        Self { expression: Some(expression), comment: (Some(comment)) }
+        Self {
+            expression: Some(expression),
+            comment: (Some(comment)),
+        }
     }
 
     pub fn from_expression(expression: Expression) -> Self {
-        Self { expression: Some(expression), comment: None }
+        Self {
+            expression: Some(expression),
+            comment: None,
+        }
     }
 
     pub fn from_comment(comment: String) -> Self {
-        Self { expression: None, comment: Some(comment) }
+        Self {
+            expression: None,
+            comment: Some(comment),
+        }
     }
 }
 
@@ -108,8 +118,9 @@ pub fn handle_place<'tcx, 'ccx>(
 
     let current_ty = fn_cx.ty_for_local(place.local);
 
-    let mut ctype =
-        fn_cx.ctype_from_cache(&current_ty).expect("No ctype found in cache for rust type");
+    let mut ctype = fn_cx
+        .ctype_from_cache(&current_ty)
+        .expect("No ctype found in cache for rust type");
 
     for proj in place.projection {
         match proj {
@@ -177,7 +188,9 @@ pub fn handle_place<'tcx, 'ccx>(
 
                         // access the variant
                         let variant_field = &union_def.fields[variant_idx.as_usize()];
-                        access.push(VariableAccess::Field { name: variant_field.get_name() });
+                        access.push(VariableAccess::Field {
+                            name: variant_field.get_name(),
+                        });
 
                         // set ctype to correct variant
                         ctype = variant_field.get_type().clone();
@@ -191,12 +204,21 @@ pub fn handle_place<'tcx, 'ccx>(
             }
 
             rustc_middle::mir::ProjectionElem::Deref => {
-                access.push(VariableAccess::Dereference);
-
-                // Another shortcut
-                ctype = fn_cx
+                let next_ctype = fn_cx
                     .ctype_from_cache(&current_ty.builtin_deref(true).unwrap())
                     .expect("No ctype found in cache for rust type");
+
+                match ctype {
+                    CType::FatPointer => access.push(VariableAccess::FatPtrDereference {
+                        ty: next_ctype.clone(),
+                    }),
+
+                    _ => {
+                        access.push(VariableAccess::Dereference);
+                    }
+                }
+
+                ctype = next_ctype;
             }
 
             rustc_middle::mir::ProjectionElem::OpaqueCast(_) => {
@@ -207,7 +229,10 @@ pub fn handle_place<'tcx, 'ccx>(
         }
     }
 
-    return Expression::Variable { local: place.local.as_usize(), access };
+    return Expression::Variable {
+        local: place.local.as_usize(),
+        access,
+    };
 }
 
 pub fn handle_operand<'tcx, 'ccx>(
@@ -219,6 +244,93 @@ pub fn handle_operand<'tcx, 'ccx>(
         // move operations can be treated as a copy operation (I think)
         Operand::Move(place) => handle_place(fn_cx, place),
         Operand::Constant(constant) => handle_constant(fn_cx, constant),
+    }
+}
+
+pub fn handle_operand_with_access<'tcx, 'ccx>(
+    fn_cx: &CodegenFunctionCx<'tcx, 'ccx>,
+    operand: &Operand<'tcx>,
+    access: Vec<VariableAccess>,
+) -> Expression {
+    let mut expression = handle_operand(fn_cx, operand);
+
+    if let Expression::Variable {
+        local,
+        access: old_access,
+    } = expression
+    {
+        let mut new_access = old_access;
+        new_access.extend(access);
+        expression = Expression::Variable {
+            local,
+            access: new_access,
+        };
+    } else {
+        panic!("Expected variable expression from handle_operand");
+    }
+
+    expression
+}
+
+fn handle_cast<'tcx, 'ccx>(
+    fn_cx: &mut CodegenFunctionCx<'tcx, 'ccx>,
+    _rvalue: &'ccx Rvalue<'tcx>,
+
+    kind: &CastKind,
+    op: &Operand<'tcx>,
+    target_ty: &Ty<'tcx>,
+) -> Expression {
+
+    let _span = debug_span!("handle_cast").entered();
+
+    debug!(
+        "Assign CAST: {:?}, op: {:?}, target: {:?}",
+        kind, op, target_ty
+    );
+
+    let target_kind = target_ty.builtin_deref(true).unwrap().kind();
+    let source_ty = op.ty(&fn_cx.mir.local_decls, fn_cx.tcx);
+    let source_deref_ty = source_ty.builtin_deref(true).unwrap();
+    let _source_ty = fn_cx.ctype_from_cache(&source_deref_ty).unwrap();
+
+    debug!("source type: {:?}", source_deref_ty);
+
+    match kind {
+        CastKind::PointerCoercion(coercion_type) => {
+            debug!("PointerCoercion: {:?}", coercion_type);
+
+            match coercion_type {
+                PointerCoercion::Unsize => {
+                    debug!("Unsize");
+
+                    match target_kind {
+                        TyKind::Dynamic(data, _, _dyn_kind) => {
+                            let alloc_id = fn_cx
+                                .tcx
+                                .vtable_allocation((source_deref_ty.clone(), data.principal()));
+                            let vtable = fn_cx.handle_global_decl(alloc_id);
+
+                            return Expression::fatptr(handle_operand(fn_cx, op), vtable);
+                        }
+
+                        _ => {
+                            panic!(
+                                "Unhandled unsize operation for target kind: {:?}",
+                                target_kind
+                            );
+                        }
+                    }
+                }
+
+                _ => {
+                    panic!("Unhandled pointer coercion type: {:?}", coercion_type);
+                }
+            }
+        }
+
+        _ => {
+            panic!("Unhandled cast kind: {:?}", kind);
+        }
     }
 }
 
@@ -250,7 +362,11 @@ fn handle_assign<'tcx, 'ccx>(
                 BinOp::AddWithOverflow | BinOp::SubWithOverflow | BinOp::MulWithOverflow => {
                     handle_checked_op(fn_cx, op.into(), lhs, rhs, &ty, &place_ty)
                 }
-                _ => Expression::BinaryOp { op: op.into(), lhs: Box::new(lhs), rhs: Box::new(rhs) },
+                _ => Expression::BinaryOp {
+                    op: op.into(),
+                    lhs: Box::new(lhs),
+                    rhs: Box::new(rhs),
+                },
             }
         }
         Rvalue::Aggregate(kind, fields) => {
@@ -261,15 +377,20 @@ fn handle_assign<'tcx, 'ccx>(
 
         Rvalue::Ref(_region, _kind, place) => {
             debug!("Assign REF: {:?}", place);
-            let place = handle_place(fn_cx, place);
+            let place: Expression = handle_place(fn_cx, place);
             if let Expression::Variable { local, access } = place {
                 let mut new_access = access.clone();
                 new_access.push(VariableAccess::Reference);
-                Expression::Variable { local, access: new_access }
+                Expression::Variable {
+                    local,
+                    access: new_access,
+                }
             } else {
                 panic!("Expected place to be a variable");
             }
         }
+
+        Rvalue::Cast(kind, op, target_ty) => handle_cast(fn_cx, rvalue, kind, op, target_ty),
 
         Rvalue::CopyForDeref(place) => {
             debug!("Assign COPY FOR DEREF: {:?}", place);
@@ -282,9 +403,13 @@ fn handle_assign<'tcx, 'ccx>(
 
             if let Expression::Variable { local, access } = handle_place(fn_cx, place) {
                 let mut modified_access = access;
-                modified_access
-                    .push(VariableAccess::Field { name: CTaggedUnionDef::TAG_NAME.to_string() });
-                Expression::Variable { local, access: modified_access }
+                modified_access.push(VariableAccess::Field {
+                    name: CTaggedUnionDef::TAG_NAME.to_string(),
+                });
+                Expression::Variable {
+                    local,
+                    access: modified_access,
+                }
             } else {
                 unreachable!("non variable for handle_place")
             }
@@ -397,7 +522,9 @@ fn handle_const_value<'tcx>(val: &ConstValue, ty: &Ty) -> Expression {
 
         rustc_middle::mir::ConstValue::ZeroSized => {
             debug!("Zerosized kind {:?}, val {:?}", ty.kind(), ty);
-            return Expression::Constant { value: ty.to_string() };
+            return Expression::Constant {
+                value: ty.to_string(),
+            };
         }
         _ => {
             warn!("Unhandled constant: {:?}", val);

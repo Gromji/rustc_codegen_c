@@ -4,6 +4,7 @@ use crate::bb::BasicBlock;
 use crate::bb::BasicBlockIdentifier;
 use crate::definition::CVarDef;
 use crate::expression::Expression;
+use crate::crepr::Representable;
 use crate::function;
 use crate::function::CFunction;
 use crate::header;
@@ -12,6 +13,7 @@ use crate::stmt::Statement;
 use crate::structure;
 use crate::ty::CIntTy;
 use crate::ty::CType;
+use crate::alloc;
 
 // Write includes to the file
 pub fn write_includes(
@@ -27,13 +29,17 @@ pub fn write_includes(
     h_file.write_all(header_includes.join("\n").as_bytes()).unwrap();
 }
 
-// Write Defines
-pub fn write_defines(defines: &Vec<header::CDefine>, file: &mut File) {
-    let defines = defines.iter().map(|d| format!("{:?}", d)).collect::<Vec<String>>();
+pub fn write_representables(reprs: &Vec<impl Representable>, file: &mut File) {
+    let reprs = reprs.iter().map(|r| r.default_repr_str()).collect::<Vec<String>>();
 
     // Write newline
     file.write_all(b"\n\n").unwrap();
-    file.write_all(defines.join("\n").as_bytes()).unwrap();
+    file.write_all(reprs.join("\n\n").as_bytes()).unwrap();
+}
+
+// Write Defines
+pub fn write_defines(defines: &Vec<header::CDefine>, file: &mut File) {
+    write_representables(defines, file)
 }
 
 // Write function prototypes
@@ -47,11 +53,7 @@ pub fn write_prototypes(functions: &Vec<function::CFunction>, file: &mut File) {
 
 // Write structs to the file
 pub fn write_structs(structs: &Vec<structure::CComposite>, file: &mut File) {
-    let structs = structs.iter().map(|s| format!("{:?}", s)).collect::<Vec<String>>();
-
-    // Write newline
-    file.write_all(b"\n\n").unwrap();
-    file.write_all(structs.join("\n\n").as_bytes()).unwrap();
+    write_representables(structs, file)
 }
 
 // Write the functions to the file
@@ -119,4 +121,8 @@ pub fn write_functions(functions: &mut Vec<function::CFunction>, file: &mut File
 
     let functions = functions.iter().map(|f| format!("{:?}", f)).collect::<Vec<String>>();
     file.write_all(functions.join("\n\n").as_bytes()).unwrap();
+}
+
+pub fn write_statics(statics: &Vec<alloc::StaticAllocation>, file: &mut File) {
+    write_representables(statics, file)
 }

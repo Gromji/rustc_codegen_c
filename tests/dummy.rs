@@ -28,6 +28,8 @@ fn main() {
     let a = test_plain_union(TestUnion { a: 1 });
 
     let a = add_many(a);
+    let a = test_dyn(&Pair::new(1, true));
+    let a = test_dyn(&Pair::new(12, 12));
 
     let a = test_closure(a, a);
 
@@ -61,6 +63,20 @@ impl<T, V> Pair<T, V> {
     fn get_second(&self) -> &V {
         &self.second
     }
+}
+
+trait TestTrait {
+    fn test(&self) -> i32;
+}
+
+impl<T> TestTrait for Pair<i32, T>{
+    fn test(&self) -> i32 {
+        self.first
+    }
+}
+
+fn test_dyn(a: &dyn TestTrait) -> i32 {
+    a.test() + 5
 }
 
 enum TestEnum {

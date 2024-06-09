@@ -1,6 +1,7 @@
 use crate::base::Context;
 use crate::bb::{BasicBlock, BasicBlockIdentifier};
 use crate::definition::CVarDef;
+use crate::fatptr::new_fat_ptr;
 use crate::function::CFunction;
 
 use crate::include::Include;
@@ -75,6 +76,8 @@ fn prefix_functions() -> Vec<CFunction> {
 
 // List of starter structs
 fn prefix_structs() -> Vec<CComposite> {
-    let structs: Vec<CComposite> = Vec::new();
+    let structs: Vec<CComposite> = vec![
+        new_fat_ptr(),
+    ];
     structs
 }
