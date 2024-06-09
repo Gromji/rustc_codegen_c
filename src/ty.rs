@@ -131,8 +131,8 @@ impl Representable for CType {
                 context.n_ptr += 1;
                 ty.repr(f, context)?;
                 context.n_ptr -= 1;
-              Ok(())
-            },
+                Ok(())
+            }
 
             CType::FatPointer => {
                 // remove one pointer level
@@ -162,7 +162,10 @@ impl Representable for CType {
                 }
             }
             CType::FunctionPtr(func_info) => {
-                let var_name = context.get_variable_name();
+                let var_name = match context.get_variable_name_option() {
+                    Some(name) => name,
+                    None => "".to_string(),
+                };
                 func_info.ret.repr(f, context)?;
                 write!(f, " (*{})(", var_name)?;
                 for (i, arg) in func_info.args.iter().enumerate() {
@@ -352,11 +355,11 @@ impl<'tcx> CodegenFunctionCx<'tcx, '_> {
         with_no_trimmed_paths!(|| {
             let name = self.tcx.def_path_str_with_args(def, args).replace("::", "__");
 
-            let name = name.replace("<", "_");        
-            let name = name.replace(">", "");        
-            let name = name.replace(",", "_");        
-            let name = name.replace(" ", "_");        
-            let name = name.replace("&", "_");        
+            let name = name.replace("<", "_");
+            let name = name.replace(">", "");
+            let name = name.replace(",", "_");
+            let name = name.replace(" ", "_");
+            let name = name.replace("&", "_");
 
             return name;
         })()
@@ -392,29 +395,30 @@ impl<'tcx> CodegenFunctionCx<'tcx, '_> {
         self.fn_pointer_type_internal(sig, true)
     }
 
-    fn fn_pointer_type_internal(&mut self, sig: &rustc_middle::ty::FnSig<'tcx>, erase_ptr_types: bool) -> CType {
+    fn fn_pointer_type_internal(
+        &mut self,
+        sig: &rustc_middle::ty::FnSig<'tcx>,
+        erase_ptr_types: bool,
+    ) -> CType {
         let inputs: Vec<CType> = sig
-        .inputs()
-        .iter()
-        .map(|ty| self.rust_to_c_type(ty))
-        .map(|ty| {
-            if erase_ptr_types {
-                match ty {
-                    CType::Pointer(_) => CType::Pointer(Box::new(CType::Void)),
-                    _ => ty,
+            .inputs()
+            .iter()
+            .map(|ty| self.rust_to_c_type(ty))
+            .map(|ty| {
+                if erase_ptr_types {
+                    match ty {
+                        CType::Pointer(_) => CType::Pointer(Box::new(CType::Void)),
+                        _ => ty,
+                    }
+                } else {
+                    ty
                 }
-            } else {
-                ty
-            }
-        })
-        .collect();
+            })
+            .collect();
 
         let output = self.rust_to_c_type(&sig.output());
 
-        CType::FunctionPtr(Box::new(CFuncPtrInfo {
-            args: inputs,
-            ret: Box::new(output),
-        }))
+        CType::FunctionPtr(Box::new(CFuncPtrInfo { args: inputs, ret: Box::new(output) }))
     }
 
     fn rust_to_c_type_internal(&mut self, ty: &Ty<'tcx>) -> CType {
@@ -560,13 +564,9 @@ impl<'tcx> CodegenFunctionCx<'tcx, '_> {
                 self.rust_to_c_type(&closure.tupled_upvars_ty())
             }
 
-            rustc_middle::ty::Dynamic(..) => {
-                CType::FatPointer {}
-            }
+            rustc_middle::ty::Dynamic(..) => CType::FatPointer {},
 
-            rustc_middle::ty::Ref(_, ty, _) => {
-                CType::Pointer(Box::new(self.rust_to_c_type(ty)))
-            }
+            rustc_middle::ty::Ref(_, ty, _) => CType::Pointer(Box::new(self.rust_to_c_type(ty))),
 
             rustc_middle::ty::Slice(ty) => self.rust_to_c_type(ty),
 
@@ -575,10 +575,8 @@ impl<'tcx> CodegenFunctionCx<'tcx, '_> {
             }
 
             rustc_middle::ty::FnPtr(s) => {
-                let sig = self
-                    .tcx
-                    .normalize_erasing_late_bound_regions(ParamEnv::reveal_all(), *s);
-                
+                let sig = self.tcx.normalize_erasing_late_bound_regions(ParamEnv::reveal_all(), *s);
+
                 self.fn_pointer_type(&sig)
             }
 

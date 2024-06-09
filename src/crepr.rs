@@ -20,10 +20,6 @@ pub struct RepresentationContext<'ctx> {
 }
 
 impl RepresentationContext<'_> {
-    pub fn get_variable_name(&mut self) -> String {
-        self.var_name.take().expect("Expected variable name in representation context")
-    }
-
     pub fn get_variable_name_option(&mut self) -> Option<String> {
         self.var_name.take()
     }

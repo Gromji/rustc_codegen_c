@@ -402,7 +402,7 @@ impl Representable for Expression {
 
                             var_repr = format!(
                                 "({} ({}.{}))",
-                                ty.repr_str(&ch_ctx),
+                                ty.repr_str(&mut ch_ctx),
                                 var_repr,
                                 FAT_PTR_DATA_FIELD
                             );
