@@ -18,13 +18,16 @@ use core::panic;
 
 use rustc_codegen_ssa::{CodegenResults, CompiledModule, CrateInfo};
 use rustc_metadata::EncodedMetadata;
+
 use rustc_middle::mir::mono::{CodegenUnit, MonoItem};
 use rustc_middle::ty::print::with_no_trimmed_paths;
+use rustc_middle::mir::interpret::AllocId;
 use rustc_session::config::{OutputFilenames, OutputType};
 use tracing::debug;
 use tracing_subscriber::util::SubscriberInitExt;
 use tracing_subscriber::EnvFilter;
 
+use crate::expression::Expression;
 use crate::function;
 use crate::header;
 use crate::include;
@@ -32,6 +35,7 @@ use crate::prefix;
 use crate::structure::{self, CComposite, CStructDef};
 use crate::ty::{CCompositeInfo, CType};
 use crate::write;
+use crate::alloc;
 
 pub struct Context {
     includes: Vec<include::Include>,
@@ -40,6 +44,7 @@ pub struct Context {
     functions: Vec<function::CFunction>,
     header_functions: Vec<function::CFunction>,
     structs: Vec<structure::CComposite>,
+    statics: Vec<alloc::StaticAllocation>,
 }
 
 impl Context {
@@ -51,6 +56,7 @@ impl Context {
             functions: Vec::new(),
             header_functions: Vec::new(),
             structs: Vec::new(),
+            statics: Vec::new(),
         }
     }
 
@@ -154,6 +160,14 @@ impl Context {
         }
         return false;
     }
+
+    pub fn add_static(&mut self, static_alloc: alloc::StaticAllocation) {
+        self.statics.push(static_alloc);
+    }
+
+    pub fn get_statics(&self) -> &Vec<alloc::StaticAllocation> {
+        &self.statics
+    }
 }
 
 pub struct OngoingCodegen {
@@ -202,6 +216,8 @@ impl OngoingCodegen {
 
         write::write_functions(self.context.get_header_functions(), &mut h_file, true);
 
+        write::write_statics(self.context.get_statics(), &mut h_file);
+
         let modules = vec![
             CompiledModule {
                 name: c_name,
@@ -238,6 +254,7 @@ fn transpile_cgu<'tcx, 'ccx>(
     cgu: &CodegenUnit<'tcx>,
     ongoing_codegen: &mut OngoingCodegen,
     rust_to_c_map: &'ccx mut std::collections::HashMap<rustc_middle::ty::Ty<'tcx>, CType>,
+    alloc_to_c_map: &'ccx mut std::collections::HashMap<AllocId, Expression>,
 ) {
     for (item, _data) in cgu.items() {
         if item.def_id().krate != 0u32.into() {
@@ -247,7 +264,7 @@ fn transpile_cgu<'tcx, 'ccx>(
         match item {
             MonoItem::Fn(inst) => {
                 with_no_trimmed_paths!({
-                    function::handle_fn(tcx, ongoing_codegen, inst.clone(), rust_to_c_map);
+                    function::handle_fn(tcx, ongoing_codegen, inst.clone(), rust_to_c_map, alloc_to_c_map, item.def_id().krate.as_usize());
                 });
             }
             MonoItem::Static(def) => {
@@ -268,6 +285,8 @@ pub fn run<'tcx>(
     let mut ongoing_codegen = Box::new(OngoingCodegen { context: Context::new() });
     let mut rust_to_c_map: std::collections::HashMap<rustc_middle::ty::Ty<'tcx>, CType> =
         std::collections::HashMap::new();
+    let mut alloc_to_c_map: std::collections::HashMap<AllocId, Expression> =
+        std::collections::HashMap::new();
 
     tracing_subscriber::FmtSubscriber::builder()
         .with_env_filter(EnvFilter::from_default_env())
@@ -280,7 +299,7 @@ pub fn run<'tcx>(
     prefix::build_prefix(&mut ongoing_codegen.context);
 
     for cgu in &cgus {
-        transpile_cgu(tcx, cgu, &mut ongoing_codegen, &mut rust_to_c_map);
+        transpile_cgu(tcx, cgu, &mut ongoing_codegen, &mut rust_to_c_map, &mut alloc_to_c_map);
     }
 
     let name: String = cgus.iter().next().unwrap().name().to_string();

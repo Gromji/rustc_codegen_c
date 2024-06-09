@@ -1,10 +1,12 @@
 use crate::crepr::{Representable, RepresentationContext};
 use crate::definition::CVarDef;
+use crate::fatptr::FAT_PTR_NAME;
 use crate::function::CodegenFunctionCx;
 use crate::structure::{CComposite, CStructDef, CTaggedUnionDef};
 use crate::utils;
 use rustc_hir::def_id::DefId;
-use rustc_middle::ty::{ParamEnv, Ty};
+use rustc_middle::ty::print::with_no_trimmed_paths;
+use rustc_middle::ty::{GenericArg, ParamEnv, Ty};
 use std::fmt::{self, Debug};
 use tracing::{debug, debug_span, error};
 
@@ -20,6 +22,9 @@ pub enum CType {
     Float(CFloatTy),
     Struct(CCompositeInfo),
     TaggedUnion(CCompositeInfo),
+
+    // data type and metadata type
+    FatPointer,
     // enums in rust are not the same as enums in C, they are more like tagged unions
     Union(CCompositeInfo),
 
@@ -126,7 +131,19 @@ impl Representable for CType {
                 let mut child_context: RepresentationContext = (*context).clone();
                 child_context.n_ptr += 1;
                 ty.repr(f, &child_context)
+            },
+
+            CType::FatPointer => {
+                // remove one pointer level
+                let ptrs = "*".repeat(std::cmp::max((context.n_ptr as i32) - 1, 0) as usize);
+                let c_type = format!("{}{}", FAT_PTR_NAME, ptrs);
+
+                match &context.var_name {
+                    Some(name) => write!(f, "{c_type} {name}"),
+                    None => write!(f, "{c_type}"),
+                }
             }
+
             CType::Array(ty, size) => {
                 // Change this later.
                 let child_context: RepresentationContext = Default::default();
@@ -145,7 +162,7 @@ impl Representable for CType {
                 func_info.ret.repr(f, &child_context)?;
                 match &context.var_name {
                     Some(name) => write!(f, " (*{})(", name)?,
-                    None => panic!("Variable must have a name"),
+                    None => write!(f, " (*)(")?,
                 }
 
                 for (i, arg) in func_info.args.iter().enumerate() {
@@ -332,17 +349,25 @@ impl<'tcx> CodegenFunctionCx<'tcx, '_> {
 
     /// This function might need to be changed further down the line to ensure that the names are truly unique and that we dont exceed any size lim
     /// TODO: cosnider hashing? would make the generated file a lot less readable though, so perhaps set to a flag so it doesn't annoy us during development
-    fn composite_name(&self, def: DefId) -> String {
+    fn composite_name(&self, def: DefId, args: &'tcx [GenericArg<'tcx>]) -> String {
         // it's improtant to preserve information before :: to avoid conflicts with types from other crates, if we ever get around to that
 
-        let name = self.tcx.def_path_str(def).replace("::", "__");
+        with_no_trimmed_paths!(|| {
+            let name = self.tcx.def_path_str_with_args(def, args).replace("::", "__");
 
-        return name;
+            let name = name.replace("<", "_");        
+            let name = name.replace(">", "");        
+            let name = name.replace(",", "_");        
+            let name = name.replace(" ", "_");        
+            let name = name.replace("&", "_");        
+
+            return name;
+        })()
     }
 
     // this is will also need to be changed
-    fn wrapper_union_name(&self, def: DefId) -> String {
-        let name = self.composite_name(def);
+    fn wrapper_union_name(&self, def: DefId, args: &'tcx [GenericArg<'tcx>]) -> String {
+        let name = self.composite_name(def, args);
 
         "__WRAPPER_UNION_".to_string() + &name
     }
@@ -360,6 +385,39 @@ impl<'tcx> CodegenFunctionCx<'tcx, '_> {
         }
 
         return name.replace("*", "__PTR__");
+    }
+
+    pub fn fn_pointer_type(&mut self, sig: &rustc_middle::ty::FnSig<'tcx>) -> CType {
+        self.fn_pointer_type_internal(sig, false)
+    }
+
+    pub fn erased_fn_pointer_type(&mut self, sig: &rustc_middle::ty::FnSig<'tcx>) -> CType {
+        self.fn_pointer_type_internal(sig, true)
+    }
+
+    fn fn_pointer_type_internal(&mut self, sig: &rustc_middle::ty::FnSig<'tcx>, erase_ptr_types: bool) -> CType {
+        let inputs: Vec<CType> = sig
+        .inputs()
+        .iter()
+        .map(|ty| self.rust_to_c_type(ty))
+        .map(|ty| {
+            if erase_ptr_types {
+                match ty {
+                    CType::Pointer(_) => CType::Pointer(Box::new(CType::Void)),
+                    _ => ty,
+                }
+            } else {
+                ty
+            }
+        })
+        .collect();
+
+        let output = self.rust_to_c_type(&sig.output());
+
+        CType::FunctionPtr(Box::new(CFuncPtrInfo {
+            args: inputs,
+            ret: Box::new(output),
+        }))
     }
 
     fn rust_to_c_type_internal(&mut self, ty: &Ty<'tcx>) -> CType {
@@ -396,7 +454,7 @@ impl<'tcx> CodegenFunctionCx<'tcx, '_> {
             rustc_middle::ty::Adt(adt_def, generic_fields) => match adt_def.adt_kind() {
                 rustc_middle::ty::AdtKind::Struct => {
                     let c_struct = CStructDef {
-                        name: self.composite_name(adt_def.did()),
+                        name: self.composite_name(adt_def.did(), generic_fields),
                         fields: adt_def
                             .all_fields()
                             .enumerate()
@@ -420,7 +478,7 @@ impl<'tcx> CodegenFunctionCx<'tcx, '_> {
 
                 rustc_middle::ty::AdtKind::Union => {
                     let c_struct = CStructDef {
-                        name: self.composite_name(adt_def.did()),
+                        name: self.composite_name(adt_def.did(), generic_fields),
                         fields: adt_def
                             .all_fields()
                             .enumerate()
@@ -457,7 +515,7 @@ impl<'tcx> CodegenFunctionCx<'tcx, '_> {
 
                         // build and save structs for each of the enum variants
                         let c_struct = CStructDef {
-                            name: self.composite_name(variant.def_id),
+                            name: self.composite_name(variant.def_id, generic_fields),
                             fields: variant_fields
                                 .iter()
                                 .enumerate()
@@ -482,7 +540,7 @@ impl<'tcx> CodegenFunctionCx<'tcx, '_> {
 
                     // create the actual union as a type
                     let union_def = CStructDef {
-                        name: self.wrapper_union_name(adt_def.did()),
+                        name: self.wrapper_union_name(adt_def.did(), generic_fields),
                         fields: variant_infos,
                     };
 
@@ -494,7 +552,7 @@ impl<'tcx> CodegenFunctionCx<'tcx, '_> {
                     let discr_type = self.rust_to_c_type(&ty.discriminant_ty(self.tcx));
 
                     let tagged_union_def = CTaggedUnionDef::new(
-                        self.composite_name(adt_def.did()),
+                        self.composite_name(adt_def.did(), generic_fields),
                         discr_type,
                         CType::Union(union_info),
                     );
@@ -513,7 +571,13 @@ impl<'tcx> CodegenFunctionCx<'tcx, '_> {
                 self.rust_to_c_type(&closure.tupled_upvars_ty())
             }
 
-            rustc_middle::ty::Ref(_, ty, _) => CType::Pointer(Box::new(self.rust_to_c_type(ty))),
+            rustc_middle::ty::Dynamic(..) => {
+                CType::FatPointer {}
+            }
+
+            rustc_middle::ty::Ref(_, ty, _) => {
+                CType::Pointer(Box::new(self.rust_to_c_type(ty)))
+            }
 
             rustc_middle::ty::Slice(ty) => self.rust_to_c_type(ty),
 
@@ -526,19 +590,8 @@ impl<'tcx> CodegenFunctionCx<'tcx, '_> {
                 let sig = self
                     .tcx
                     .normalize_erasing_late_bound_regions(ParamEnv::reveal_all(), *s);
-
-                let inputs: Vec<CType> = sig
-                    .inputs()
-                    .iter()
-                    .map(|ty| self.rust_to_c_type(ty))
-                    .collect();
-
-                let output = self.rust_to_c_type(&sig.output());
-
-                CType::FunctionPtr(Box::new(CFuncPtrInfo {
-                    args: inputs,
-                    ret: Box::new(output),
-                }))
+                
+                self.fn_pointer_type(&sig)
             }
 
             _ => CType::from(ty),

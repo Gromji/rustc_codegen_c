@@ -1,13 +1,17 @@
 use crate::bb::{self, BasicBlock};
 use crate::crepr::{indent, Representable, RepresentationContext};
 use crate::definition::CVarDef;
+use crate::expression::Expression;
 use crate::ty::CType;
 use crate::{base::OngoingCodegen, definition::CVarDecl};
+use rustc_const_eval::interpret::ConstAllocation;
+use rustc_middle::mir::interpret::{AllocId, GlobalAlloc};
 use rustc_middle::ty::{self, Instance, SymbolName, TyCtxt, TypeFoldable};
+// use stable_mir::mir::alloc::{AllocId, GlobalAlloc};
 use std::collections::HashSet;
 use std::fmt::{self, Debug};
 
-use tracing::{debug, trace};
+use tracing::{debug, trace, warn};
 
 #[derive(Clone, PartialEq, Eq)]
 pub struct CFunction {
@@ -24,7 +28,10 @@ pub struct CodegenFunctionCx<'tcx, 'ccx> {
     pub ongoing_codegen: &'ccx mut OngoingCodegen,
 
     instance: Instance<'tcx>,
+    pub crate_num: usize,
+
     pub(crate) ty_to_c: &'ccx mut std::collections::HashMap<ty::Ty<'tcx>, CType>,
+    pub(crate) alloc_to_c: &'ccx mut std::collections::HashMap<AllocId, Expression>,
 }
 
 impl<'tcx> CodegenFunctionCx<'tcx, '_> {
@@ -45,6 +52,75 @@ impl<'tcx> CodegenFunctionCx<'tcx, '_> {
 
     pub fn ctype_from_cache(&self, ty: &ty::Ty<'tcx>) -> Option<CType> {
         self.ty_to_c.get(ty).cloned()
+    }
+
+    fn handle_cosnt_alloc(&mut self, alloc: ConstAllocation, alloc_id: AllocId) -> Expression {
+        let inner_alloc = alloc.inner();
+
+        let alloc_bytes: Vec<u8> =
+            inner_alloc.inspect_with_uninit_and_ptr_outside_interpreter(0..inner_alloc.len()).into();
+
+        let ptrs = inner_alloc.provenance().ptrs();
+
+        let mut ptr_declrs: Vec<(usize, Expression)> = Vec::new();
+
+        for (offset, prov) in ptrs.iter() {
+            let offset = u32::try_from(offset.bytes_usize()).unwrap();
+            // Check if this allocation is a function
+            let reloc_target_alloc = self.tcx.global_alloc(prov.alloc_id());
+
+            if let GlobalAlloc::Function(finstance) = reloc_target_alloc {
+                let fn_name = format_fn_name(&self.tcx.symbol_name(finstance));
+
+                ptr_declrs.push((
+                    offset as usize,
+                    Expression::Constant { value: fn_name },
+                ));
+            } else {
+                warn!("Not a function alloc: {:?}", reloc_target_alloc);
+
+                ptr_declrs.push((
+                    offset as usize,
+                    Expression::Constant {
+                        value: format!("ptr_{}", offset),
+                    },
+                ));
+            }
+        }
+
+        let alloc_name = format!("ALLOC_{}_CRATE_{}", alloc_id.0, self.crate_num);
+
+        let static_alloc = crate::alloc::StaticAllocation::new(
+            alloc_name.clone(),
+            alloc_bytes,
+            ptr_declrs,
+        );
+
+        self.ongoing_codegen.context.add_static(static_alloc);
+
+        Expression::Constant {value: format!("&{}",alloc_name.clone())}
+    }
+
+    pub fn handle_global_decl(&mut self, alloc: AllocId) -> Expression {
+        if self.alloc_to_c.contains_key(&alloc) {
+            return self.alloc_to_c[&alloc].clone();
+        }
+        
+        let global_alloc = self.tcx.global_alloc(alloc);
+
+        let c_alloc = match global_alloc {
+            GlobalAlloc::Memory(const_alloc) => {
+                self.handle_cosnt_alloc(const_alloc, alloc)
+            }
+
+            _ => {
+                panic!("Global alloc not handled: {:?}", global_alloc);
+            }
+        };
+
+        self.alloc_to_c.insert(alloc, c_alloc.clone());
+
+        c_alloc
     }
 }
 
@@ -209,6 +285,8 @@ pub fn handle_fn<'tcx, 'ccx>(
     ongoing_codegen: &mut OngoingCodegen,
     inst: Instance<'tcx>,
     rust_to_c_map: &'ccx mut std::collections::HashMap<ty::Ty<'tcx>, CType>,
+    alloc_to_c_map: &'ccx mut std::collections::HashMap<AllocId, Expression>,
+    crate_num: usize,
 ) {
     // this resolves generic parameters to concrete types
     let mono_mir = inst.instantiate_mir_and_normalize_erasing_regions(
@@ -223,6 +301,8 @@ pub fn handle_fn<'tcx, 'ccx>(
         instance: inst,
         mir: &mono_mir,
         ty_to_c: rust_to_c_map,
+        crate_num,
+        alloc_to_c: alloc_to_c_map,
     };
 
     let mut c_fn = CFunction::new(

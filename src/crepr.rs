@@ -52,6 +52,7 @@ pub trait Representable {
             },
         )
     }
+
     fn indented_repr(
         &self,
         f: &mut (dyn fmt::Write),
@@ -60,10 +61,23 @@ pub trait Representable {
         self.repr(f, &RepresentationContext { indent: context.indent + 1, ..context.clone() })
     }
 
+    fn default_repr_str(&self) -> String {
+        let mut s = String::new();
+        self.default_repr(&mut s).unwrap();
+        s
+    }
+
     fn repr_str(&self, context: &RepresentationContext) -> String {
         let mut s = String::new();
         self.repr(&mut s, context).unwrap();
         s
+    }
+
+    fn newline(&self, f: &mut (dyn fmt::Write), context: &RepresentationContext) -> fmt::Result {
+        if context.include_newline {
+            write!(f, "\n")?;
+        }
+        Ok(())
     }
 }
 

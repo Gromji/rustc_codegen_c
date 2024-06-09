@@ -39,6 +39,8 @@ mod structure;
 mod ty;
 mod utils;
 mod write;
+mod alloc;
+mod fatptr;
 
 pub struct CCodegenBackend(());
 
