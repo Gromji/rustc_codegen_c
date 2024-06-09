@@ -12,7 +12,7 @@ fn test_cast() -> usize {
     // CHECK: uint64_t {{[a-zA-Z0-9_]+}};
     let num3 = 20usize;
 
-    // CHECK: (uint64_t){{[a-zA-Z0-9_]+}};
+    // CHECK: ((uint64_t){{[a-zA-Z0-9_]+}});
     num2 = num1 as usize;
 
     num2 + num3

@@ -41,6 +41,9 @@ clean_tests:
 clean:
 	cargo clean
 
+compile_cargo:
+	RUSTFLAGS="-Zcodegen-backend=./target/release/librustc_codegen_c.so" cargo +nightly build --release
+
 # for convenience sake
 dummy:
 	cargo build --release
