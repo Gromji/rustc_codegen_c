@@ -128,14 +128,17 @@ impl Representable for CType {
                 ty.repr(f, &child_context)
             }
             CType::Array(ty, size) => {
-                let mut child_context: RepresentationContext = (*context).clone();
-                child_context.var_name = Some("".to_string());
+                // Change this later.
+                let child_context: RepresentationContext = Default::default();
                 ty.repr(f, &child_context)?;
 
-                debug!("context {:?}", context);
-
-                if context.func_sig_var {
-                    write!(f, "*{}", context.get_variable_name())
+                if context.n_ptr > 0 {
+                    write!(
+                        f,
+                        "{} {}",
+                        "*".repeat(context.n_ptr.into()),
+                        context.get_variable_name()
+                    )
                 } else if *size as u32 == 0 {
                     write!(f, " {}[]", context.get_variable_name())
                 } else {

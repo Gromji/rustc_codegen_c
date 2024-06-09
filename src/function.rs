@@ -15,6 +15,7 @@ pub struct CFunction {
     signature: Vec<CVarDef>,
     local_decl: Vec<CVarDecl>,
     basic_blocks: Vec<BasicBlock>,
+    is_main: bool,
     return_ty: CType,
 }
 
@@ -52,23 +53,13 @@ impl Representable for CFunction {
     fn repr(&self, f: &mut (dyn fmt::Write), context: &RepresentationContext) -> fmt::Result {
         let mut new_context = context.clone();
         new_context.cur_fn = Some(&self);
-
-        let mut ctx_ret_clone = new_context.clone();
-        ctx_ret_clone.func_sig_var = true;
-        ctx_ret_clone.var_name = Some("".to_string());
-
-        self.return_ty.repr(f, &ctx_ret_clone)?;
-
+        self.return_ty.repr(f, &new_context)?;
         write!(f, " {}(", self.name)?;
-
-        let mut ctx_arg_clone = new_context.clone();
-        ctx_arg_clone.func_sig_var = true;
-
         for (i, arg) in self.signature.iter().enumerate() {
             if i > 0 {
                 write!(f, ", ")?;
             }
-            arg.repr(f, &ctx_arg_clone)?;
+            arg.repr(f, &new_context)?;
         }
         write!(f, ") ")?;
 
@@ -100,12 +91,13 @@ impl CFunction {
             signature: Vec::new(),
             local_decl: Vec::new(),
             basic_blocks: Vec::new(),
+            is_main: false,
             return_ty: return_ty,
         }
     }
 
     pub fn is_main(&self) -> bool {
-        self.name == "main"
+        self.is_main
     }
 
     pub fn get_name(&self) -> &str {
@@ -244,6 +236,8 @@ pub fn handle_fn<'tcx, 'ccx>(
         format_fn_name(&tcx.symbol_name(inst)),
         fn_cx.rust_to_c_type(&mono_mir.return_ty()),
     );
+
+    c_fn.is_main = inst.to_string() == "main";
 
     // Pring mir of function for debugging
     print_mir(tcx, &mono_mir);

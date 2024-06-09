@@ -59,46 +59,61 @@ pub fn write_functions(functions: &mut Vec<function::CFunction>, file: &mut File
     // Write newline
     file.write_all(b"\n\n").unwrap();
 
-    let main_exists = functions.iter().any(|f| f.is_main());
+    let mut rust_main: Option<&mut CFunction> = None;
+    let mut c_main: Option<&mut CFunction> = None;
+
+    functions.iter_mut().for_each(|f| {
+        if f.is_main() {
+            rust_main = Some(f);
+        } else {
+            if f.get_name() == "main" {
+                c_main = Some(f);
+            }
+        }
+    });
 
     if !is_header {
-        if main_exists {
-            if let Some(main) = functions.iter_mut().find(|f| f.is_main()) {
-                main.clear_bb();
+        if let Some(c_m) = c_main {
+            c_m.clear_bb();
 
-                let mut bb = BasicBlock::new(BasicBlockIdentifier(0usize));
-
-                bb.push(Statement::from_expression(Expression::FnCall {
-                    function: Box::new(Expression::Constant { value: "_main".into() }),
-                    args: vec![],
-                }));
-
-                bb.push(Statement::from_expression(Expression::Return {
-                    value: Box::new(Expression::Constant { value: "0".into() }),
-                }));
-
-                main.push_bb(bb);
-            }
-        } else {
-            let mut main = CFunction::new("main".to_string(), CType::Int(CIntTy::Int32));
-            main.add_signature_var(CVarDef::new(0, "argc".to_string(), CType::Int(CIntTy::Int32)));
-            main.add_signature_var(CVarDef::new(
-                1,
-                "argv".to_string(),
-                CType::Array(Box::new(CType::Pointer(Box::new(CType::Int(CIntTy::Int8)))), 0),
-            ));
             let mut bb = BasicBlock::new(BasicBlockIdentifier(0usize));
 
-            bb.push(Statement::from_expression(Expression::FnCall {
-                function: Box::new(Expression::Constant { value: "_main".into() }),
-                args: vec![],
-            }));
+            if let Some(r_main) = rust_main {
+                bb.push(Statement::from_expression(Expression::FnCall {
+                    function: Box::new(Expression::Constant { value: r_main.get_name().into() }),
+                    args: vec![],
+                }));
+            }
 
             bb.push(Statement::from_expression(Expression::Return {
                 value: Box::new(Expression::Constant { value: "0".into() }),
             }));
 
-            main.push_bb(bb);
+            c_m.push_bb(bb);
+        } else {
+            let mut c_m = CFunction::new("main".to_string(), CType::Int(CIntTy::Int32));
+            c_m.add_signature_var(CVarDef::new(0, "argc".to_string(), CType::Int(CIntTy::Int32)));
+            c_m.add_signature_var(CVarDef::new(
+                1,
+                "argv".to_string(),
+                CType::Array(Box::new(CType::Pointer(Box::new(CType::Int(CIntTy::Int8)))), 0),
+            ));
+
+            let mut bb = BasicBlock::new(BasicBlockIdentifier(0usize));
+
+            if let Some(r_main) = rust_main {
+                bb.push(Statement::from_expression(Expression::FnCall {
+                    function: Box::new(Expression::Constant { value: r_main.get_name().into() }),
+                    args: vec![],
+                }));
+            }
+
+            bb.push(Statement::from_expression(Expression::Return {
+                value: Box::new(Expression::Constant { value: "0".into() }),
+            }));
+
+            c_m.push_bb(bb);
+            functions.push(c_m);
         }
     }
 
