@@ -12,7 +12,7 @@ impl Representable for Include {
     fn repr(
         &self,
         f: &mut (dyn fmt::Write),
-        _context: &crate::crepr::RepresentationContext,
+        _context: &mut crate::crepr::RepresentationContext,
     ) -> fmt::Result {
         if self.is_system {
             write!(f, "#include <{}>", self.name)

@@ -1,4 +1,4 @@
-use crate::crepr::{Representable, RepresentationContext};
+use crate::crepr::Representable;
 use crate::definition::CVarDef;
 use crate::function::CodegenFunctionCx;
 use crate::structure::{CComposite, CStructDef, CTaggedUnionDef};
@@ -43,14 +43,14 @@ impl Representable for CType {
     fn repr(
         &self,
         f: &mut (dyn fmt::Write),
-        context: &crate::crepr::RepresentationContext,
+        context: &mut crate::crepr::RepresentationContext,
     ) -> fmt::Result {
         match self {
             // Custom struct for Rust's Unit type
             CType::Unit => {
                 let ptrs = "*".repeat(context.n_ptr.into());
                 let c_type = format!("__Unit{}", ptrs);
-                match &context.var_name {
+                match context.get_variable_name_option() {
                     Some(name) => write!(f, "{c_type} {name}"),
                     None => write!(f, "{c_type}"),
                 }
@@ -58,7 +58,7 @@ impl Representable for CType {
             CType::Void => {
                 let ptrs = "*".repeat(context.n_ptr.into());
                 let c_type = format!("void{}", ptrs);
-                match &context.var_name {
+                match context.get_variable_name_option() {
                     Some(name) => write!(f, "{c_type} {name}"),
                     None => write!(f, "{c_type}"),
                 }
@@ -66,7 +66,7 @@ impl Representable for CType {
             CType::Bool => {
                 let ptrs = "*".repeat(context.n_ptr.into());
                 let c_type = format!("bool{}", ptrs);
-                match &context.var_name {
+                match context.get_variable_name_option() {
                     Some(name) => write!(f, "{c_type} {name}"),
                     None => write!(f, "{c_type}"),
                 }
@@ -74,7 +74,7 @@ impl Representable for CType {
             CType::Char => {
                 let ptrs = "*".repeat(context.n_ptr.into());
                 let c_type = format!("char32_t{}", ptrs);
-                match &context.var_name {
+                match context.get_variable_name_option() {
                     Some(name) => write!(f, "{c_type} {name}"),
                     None => write!(f, "{c_type}"),
                 }
@@ -82,7 +82,7 @@ impl Representable for CType {
             CType::Int(i) => {
                 let ptrs = "*".repeat(context.n_ptr.into());
                 let c_type = format!("{}{}", i.name_str(), ptrs);
-                match &context.var_name {
+                match context.get_variable_name_option() {
                     Some(name) => write!(f, "{c_type} {name}"),
                     None => write!(f, "{c_type}"),
                 }
@@ -90,7 +90,7 @@ impl Representable for CType {
             CType::UInt(u) => {
                 let ptrs = "*".repeat(context.n_ptr.into());
                 let c_type = format!("{}{}", u.name_str(), ptrs);
-                match &context.var_name {
+                match context.get_variable_name_option() {
                     Some(name) => write!(f, "{c_type} {name}"),
                     None => write!(f, "{c_type}"),
                 }
@@ -98,7 +98,7 @@ impl Representable for CType {
             CType::Float(float) => {
                 let ptrs = "*".repeat(context.n_ptr.into());
                 let c_type = format!("{}{}", float.name_str(), ptrs);
-                match &context.var_name {
+                match context.get_variable_name_option() {
                     Some(name) => write!(f, "{c_type} {name}"),
                     None => write!(f, "{c_type}"),
                 }
@@ -108,7 +108,7 @@ impl Representable for CType {
                 let struct_name = &info.name;
                 let ptrs = "*".repeat(context.n_ptr.into());
                 let c_type = format!("{struct_name}{ptrs}");
-                match &context.var_name {
+                match context.get_variable_name_option() {
                     Some(name) => write!(f, "{c_type} {name}"),
                     None => write!(f, "{c_type}"),
                 }
@@ -117,51 +117,47 @@ impl Representable for CType {
             CType::Enum => {
                 let ptrs = "*".repeat(context.n_ptr.into());
                 let _c_type = format!("enum{}", ptrs);
-                match &context.var_name {
+                match context.get_variable_name_option() {
                     Some(name) => write!(f, "enum {name}"),
                     None => write!(f, "enum"),
                 }
             }
             CType::Pointer(ty) => {
-                let mut child_context: RepresentationContext = (*context).clone();
-                child_context.n_ptr += 1;
-                ty.repr(f, &child_context)
+                context.n_ptr += 1;
+                ty.repr(f, context)?;
+                context.n_ptr -= 1;
+                Ok(())
             }
             CType::Array(ty, size) => {
-                // Change this later.
-                let child_context: RepresentationContext = Default::default();
-                ty.repr(f, &child_context)?;
+                ty.repr(f, context)?;
+
+                let var_name = match context.get_variable_name_option() {
+                    Some(name) => name,
+                    None => "".to_string(),
+                };
 
                 if context.n_ptr > 0 {
-                    write!(
-                        f,
-                        "{} {}",
-                        "*".repeat(context.n_ptr.into()),
-                        context.get_variable_name()
-                    )
+                    write!(f, "{} {}", "*".repeat(context.n_ptr.into()), var_name)
                 } else if *size as u32 == 0 {
-                    write!(f, " {}[]", context.get_variable_name())
+                    write!(f, "{}[]", var_name)
                 } else {
-                    write!(f, " {}[{}]", context.get_variable_name(), size)
+                    write!(f, "{}[{}]", var_name, size)
                 }
             }
             CType::FunctionPtr(func_info) => {
-                let child_context: RepresentationContext = Default::default();
-                func_info.ret.repr(f, &child_context)?;
-                match &context.var_name {
-                    Some(name) => write!(f, " (*{})(", name)?,
-                    None => panic!("Variable must have a name"),
-                }
+                let var_name = context.get_variable_name();
+                func_info.ret.repr(f, context)?;
+                write!(f, " (*{})(", var_name)?;
 
                 for (i, arg) in func_info.args.iter().enumerate() {
                     if i > 0 {
                         write!(f, ", ")?;
                     }
-                    arg.repr(f, &child_context)?;
+                    arg.repr(f, context)?;
                 }
 
                 if func_info.args.len() == 0 {
-                    CType::Void.repr(f, &child_context)?;
+                    CType::Void.repr(f, context)?;
                 }
                 write!(f, ")")
             }

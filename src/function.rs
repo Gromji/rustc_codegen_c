@@ -50,28 +50,28 @@ impl<'tcx> CodegenFunctionCx<'tcx, '_> {
 }
 
 impl Representable for CFunction {
-    fn repr(&self, f: &mut (dyn fmt::Write), context: &RepresentationContext) -> fmt::Result {
+    fn repr(&self, f: &mut (dyn fmt::Write), context: &mut RepresentationContext) -> fmt::Result {
         let mut new_context = context.clone();
         new_context.cur_fn = Some(&self);
-        self.return_ty.repr(f, &new_context)?;
+        self.return_ty.repr(f, &mut new_context)?;
         write!(f, " {}(", self.name)?;
         for (i, arg) in self.signature.iter().enumerate() {
             if i > 0 {
                 write!(f, ", ")?;
             }
-            arg.repr(f, &new_context)?;
+            arg.repr(f, &mut new_context)?;
         }
         write!(f, ") ")?;
 
         write!(f, "{{\n")?;
         for decl in &self.local_decl {
             indent(f, &new_context)?;
-            decl.repr(f, &new_context)?;
+            decl.repr(f, &mut new_context)?;
             write!(f, "\n")?;
         }
 
         for bb in self.basic_blocks.iter() {
-            bb.repr(f, &new_context)?;
+            bb.repr(f, &mut new_context)?;
         }
 
         write!(f, "}}")

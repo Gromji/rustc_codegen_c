@@ -27,10 +27,9 @@ impl CVarDef {
 }
 
 impl Representable for CVarDef {
-    fn repr(&self, f: &mut (dyn fmt::Write), _context: &RepresentationContext) -> fmt::Result {
-        let mut new_context = _context.clone();
-        new_context.var_name = Some(self.name.clone());
-        self.ty.repr(f, &new_context)
+    fn repr(&self, f: &mut (dyn fmt::Write), context: &mut RepresentationContext) -> fmt::Result {
+        context.var_name = Some(self.name.clone());
+        self.ty.repr(f, context)
     }
 }
 
@@ -70,16 +69,16 @@ impl CVarDecl {
 }
 
 impl Representable for CVarDecl {
-    fn repr(&self, f: &mut (dyn fmt::Write), _context: &RepresentationContext) -> fmt::Result {
+    fn repr(&self, f: &mut (dyn fmt::Write), context: &mut RepresentationContext) -> fmt::Result {
         match &self.value {
             Some(value) => {
-                self.var.repr(f, _context)?;
+                self.var.repr(f, context)?;
                 write!(f, " = ")?;
-                value.repr(f, _context)?;
+                value.repr(f, context)?;
                 write!(f, ";")
             }
             None => {
-                self.var.repr(f, _context)?;
+                self.var.repr(f, context)?;
                 write!(f, ";")
             }
         }

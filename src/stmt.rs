@@ -34,7 +34,7 @@ impl Statement {
 }
 
 impl Representable for Statement {
-    fn repr(&self, f: &mut (dyn fmt::Write), context: &RepresentationContext) -> fmt::Result {
+    fn repr(&self, f: &mut (dyn fmt::Write), context: &mut RepresentationContext) -> fmt::Result {
         if context.include_comments {
             if let Some(comment) = &self.comment {
                 indent(f, context)?;

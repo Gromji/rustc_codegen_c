@@ -20,13 +20,17 @@ pub struct RepresentationContext<'ctx> {
 }
 
 impl RepresentationContext<'_> {
-    pub fn get_variable_name(&self) -> String {
-        self.var_name.clone().expect("Expected variable name in representation context")
+    pub fn get_variable_name(&mut self) -> String {
+        self.var_name.take().expect("Expected variable name in representation context")
+    }
+
+    pub fn get_variable_name_option(&mut self) -> Option<String> {
+        self.var_name.take()
     }
 }
 
 pub trait Representable {
-    fn repr(&self, f: &mut (dyn fmt::Write), context: &RepresentationContext) -> fmt::Result;
+    fn repr(&self, f: &mut (dyn fmt::Write), context: &mut RepresentationContext) -> fmt::Result;
 
     fn default_repr(&self, f: &mut (dyn fmt::Write)) -> fmt::Result {
         let include = true;
@@ -43,7 +47,7 @@ pub trait Representable {
 
         self.repr(
             f,
-            &RepresentationContext {
+            &mut RepresentationContext {
                 indent: 1,
                 indent_string: "\t".into(),
                 include_newline: true,
@@ -55,12 +59,12 @@ pub trait Representable {
     fn indented_repr(
         &self,
         f: &mut (dyn fmt::Write),
-        context: &RepresentationContext,
+        context: &mut RepresentationContext,
     ) -> fmt::Result {
-        self.repr(f, &RepresentationContext { indent: context.indent + 1, ..context.clone() })
+        self.repr(f, &mut RepresentationContext { indent: context.indent + 1, ..context.clone() })
     }
 
-    fn repr_str(&self, context: &RepresentationContext) -> String {
+    fn repr_str(&self, context: &mut RepresentationContext) -> String {
         let mut s = String::new();
         self.repr(&mut s, context).unwrap();
         s

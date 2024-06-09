@@ -25,7 +25,6 @@ fn sort() {
     }
 }
 
-#[no_mangle]
 fn main() {
     sort();
 }

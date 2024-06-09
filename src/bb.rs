@@ -17,7 +17,7 @@ impl Representable for BasicBlockIdentifier {
     fn repr(
         &self,
         f: &mut (dyn fmt::Write),
-        _context: &crate::crepr::RepresentationContext,
+        _context: &mut crate::crepr::RepresentationContext,
     ) -> std::fmt::Result {
         write!(f, "bb{}", self.0)
     }
@@ -59,7 +59,7 @@ impl Representable for BasicBlock {
     fn repr(
         &self,
         f: &mut (dyn fmt::Write),
-        context: &crate::crepr::RepresentationContext,
+        context: &mut crate::crepr::RepresentationContext,
     ) -> std::fmt::Result {
         indent(f, context)?;
         self.bb_id.repr(f, context)?;

@@ -67,7 +67,7 @@ impl From<&rustc_middle::mir::BinOp> for BinOpType {
 }
 
 impl Representable for BinOpType {
-    fn repr(&self, f: &mut (dyn fmt::Write), _context: &RepresentationContext) -> fmt::Result {
+    fn repr(&self, f: &mut (dyn fmt::Write), _context: &mut RepresentationContext) -> fmt::Result {
         match self {
             BinOpType::Add => write!(f, "+"),
             BinOpType::Sub => write!(f, "-"),
@@ -126,7 +126,7 @@ pub enum UnaryOpType {
 }
 
 impl Representable for UnaryOpType {
-    fn repr(&self, f: &mut (dyn fmt::Write), _context: &RepresentationContext) -> fmt::Result {
+    fn repr(&self, f: &mut (dyn fmt::Write), _context: &mut RepresentationContext) -> fmt::Result {
         match self {
             UnaryOpType::Neg => write!(f, "-"),
             UnaryOpType::Not => write!(f, "!"),
@@ -296,7 +296,7 @@ impl BitAnd for Box<Expression> {
 }
 
 impl Representable for Expression {
-    fn repr(&self, f: &mut (dyn fmt::Write), context: &RepresentationContext) -> fmt::Result {
+    fn repr(&self, f: &mut (dyn fmt::Write), context: &mut RepresentationContext) -> fmt::Result {
         match self {
             Expression::Constant { value } => {
                 write!(f, "{}", value)
