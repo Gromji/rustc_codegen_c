@@ -155,7 +155,6 @@ impl Debug for CFunction {
 impl CFunction {
     pub const RETURN_STRUCT_FIELD_NAME: &'static str = "result";
     pub const RETURN_STRUCT_PREFIX: &'static str = "t";
-    pub const RETURN_STRUCT_SUFFIX: &'static str = "ret";
 
     pub fn new(name: String, return_ty: CType) -> Self {
         Self {
@@ -318,12 +317,7 @@ pub fn handle_fn<'tcx, 'ccx>(
         fn_name = format!("_{}", fn_name);
     }
 
-    let ret_struct_name = format!(
-        "{}_{}_{}",
-        CFunction::RETURN_STRUCT_PREFIX,
-        fn_name.as_str(),
-        CFunction::RETURN_STRUCT_SUFFIX
-    );
+    let ret_struct_name = format!("{}_{}", CFunction::RETURN_STRUCT_PREFIX, fn_name.as_str());
     warn!("{}\n{}", fn_name.as_str(), ret_struct_name.as_str());
     let return_struct = structure::CComposite::Struct(structure::CStructDef {
         name: ret_struct_name,

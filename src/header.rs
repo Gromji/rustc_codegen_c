@@ -67,12 +67,7 @@ pub fn handle_checked_op<'tcx, 'ccx>(
 
     if !fn_cx.ongoing_codegen.context.exists_header_fn_with_name(fn_name.as_str()) {
         debug!("Function for {fn_name} not found, creating one!");
-        let ret_struct_name = format!(
-            "{}_{}_{}",
-            CFunction::RETURN_STRUCT_PREFIX,
-            fn_name.as_str(),
-            CFunction::RETURN_STRUCT_SUFFIX
-        );
+        let ret_struct_name = format!("{}_{}", CFunction::RETURN_STRUCT_PREFIX, fn_name.as_str());
 
         let return_struct = structure::CComposite::Struct(structure::CStructDef {
             name: ret_struct_name,
