@@ -7,7 +7,7 @@ use crate::{
     expression::{BinOpType, Expression},
     function::{CFunction, CodegenFunctionCx},
     stmt::Statement,
-    structure::CStructDef,
+    structure::{self, CStructDef},
     ty::CType,
 };
 use rustc_middle::ty::Ty;
@@ -67,6 +67,24 @@ pub fn handle_checked_op<'tcx, 'ccx>(
 
     if !fn_cx.ongoing_codegen.context.exists_header_fn_with_name(fn_name.as_str()) {
         debug!("Function for {fn_name} not found, creating one!");
+        let ret_struct_name = format!(
+            "{}_{}_{}",
+            CFunction::RETURN_STRUCT_PREFIX,
+            fn_name.as_str(),
+            CFunction::RETURN_STRUCT_SUFFIX
+        );
+
+        let return_struct = structure::CComposite::Struct(structure::CStructDef {
+            name: ret_struct_name,
+            fields: vec![CVarDef::new(
+                0,
+                CFunction::RETURN_STRUCT_FIELD_NAME.to_string(),
+                return_ty,
+            )],
+        });
+        let ret_info = fn_cx.ongoing_codegen.context.add_composite(&return_struct);
+        let return_ty = CType::Struct(ret_info);
+
         let checked_op = match op {
             BinOpType::CheckedAdd => {
                 if ty.is_signed() {
@@ -93,12 +111,14 @@ pub fn handle_checked_op<'tcx, 'ccx>(
                 todo!("Checked operation not handled: {:?}", op);
             }
         };
+
         fn_cx.ongoing_codegen.context.get_mut_header_functions().push(checked_op);
     }
     span.exit();
     Expression::FnCall {
         function: Box::new(Expression::Constant { value: fn_name }),
         args: vec![lhs, rhs],
+        is_builtin: false,
     }
 }
 

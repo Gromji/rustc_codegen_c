@@ -42,10 +42,7 @@ pub struct BasicBlock {
 
 impl BasicBlock {
     pub fn new(bb_id: BasicBlockIdentifier) -> Self {
-        Self {
-            bb_id,
-            statements: Vec::new(),
-        }
+        Self { bb_id, statements: Vec::new() }
     }
 
     #[allow(dead_code)]
@@ -104,24 +101,18 @@ fn handle_dynamic_dispatch<'tcx, 'ccx>(
     fn_type: CType,
     fn_offset: usize,
 ) -> Expression {
-    let vtable_arg = args
-        .get(0)
-        .expect("dynamic dispatch call must contain at least one arg")
-        .clone();
+    let vtable_arg =
+        args.get(0).expect("dynamic dispatch call must contain at least one arg").clone();
 
     let vtable_access = handle_operand_with_access(
         fn_cx,
         &vtable_arg.node,
         vec![
-            VariableAccess::Field {
-                name: FAT_PTR_META_FIELD.to_string(),
-            }, 
+            VariableAccess::Field { name: FAT_PTR_META_FIELD.to_string() },
             VariableAccess::Cast {
                 ty: CType::Pointer(Box::new(CType::Pointer(Box::new(CType::Void)))),
             },
-            VariableAccess::Index {
-                expression: Expression::const_int(fn_offset as i128),
-            },
+            VariableAccess::Index { expression: Expression::const_int(fn_offset as i128) },
             VariableAccess::Cast { ty: fn_type },
         ],
     );
@@ -129,23 +120,14 @@ fn handle_dynamic_dispatch<'tcx, 'ccx>(
     let self_access = handle_operand_with_access(
         fn_cx,
         &args[0].node,
-        vec![VariableAccess::Field {
-            name: FAT_PTR_DATA_FIELD.to_string(),
-        }],
+        vec![VariableAccess::Field { name: FAT_PTR_DATA_FIELD.to_string() }],
     );
 
     let mut fn_args: Vec<Expression> = Vec::new();
     fn_args.push(self_access);
-    fn_args.extend(
-        args.iter()
-            .skip(1)
-            .map(|arg| handle_operand(fn_cx, &arg.node)),
-    );
+    fn_args.extend(args.iter().skip(1).map(|arg| handle_operand(fn_cx, &arg.node)));
 
-    Expression::FnCall {
-        function: Box::new(vtable_access),
-        args: fn_args,
-    }
+    Expression::FnCall { function: Box::new(vtable_access), args: fn_args, is_builtin: true }
 }
 
 fn handle_function_call<'tcx, 'ccx>(
@@ -203,6 +185,7 @@ fn handle_function_call<'tcx, 'ccx>(
                                     .iter()
                                     .map(|arg| handle_operand(fn_cx, &arg.node))
                                     .collect(),
+                                is_builtin: false,
                             }
                         }
                     } else {
@@ -274,9 +257,7 @@ pub fn handle_terminator<'tcx, 'ccx>(
                     .iter()
                     .map(|(val, target)| {
                         (
-                            Box::new(Expression::Constant {
-                                value: format!("{}", (&val)),
-                            }), // TODO replace with proper constant representation
+                            Box::new(Expression::Constant { value: format!("{}", (&val)) }), // TODO replace with proper constant representation
                             BasicBlockIdentifier(target.as_usize()),
                         )
                     })
@@ -311,36 +292,25 @@ pub fn handle_terminator<'tcx, 'ccx>(
             return vec![stmt];
         }
 
-        TerminatorKind::Assert {
-            cond,
-            expected,
-            msg: _,
-            target,
-            ..
-        } => {
+        TerminatorKind::Assert { cond, expected, msg: _, target, .. } => {
             /*  TODO we could ignore asserts, implement them with the assert define or allow the user to provide custom implementations to handle them.
                 I personally think the latter would be best and would allow us to side-step other similar issues.
                 We would have a default implementation that would use the assert macro, but the user could provide their own implementation.
             */
             let mut assert_operand = handle_operand(fn_cx, &cond);
             if !expected {
-                assert_operand = Expression::UnaryOp {
-                    op: UnaryOpType::Not,
-                    val: Box::new(assert_operand),
-                };
+                assert_operand =
+                    Expression::UnaryOp { op: UnaryOpType::Not, val: Box::new(assert_operand) };
             }
 
             let assert_stmt = Statement::from_expression(Expression::FnCall {
-                function: Box::new(Expression::Constant {
-                    value: "assert".to_string(),
-                }),
+                function: Box::new(Expression::Constant { value: "assert".to_string() }),
                 args: vec![assert_operand],
+                is_builtin: true,
             });
 
             let stmt = Statement::new(
-                Expression::Goto {
-                    target: BasicBlockIdentifier(target.as_usize()),
-                },
+                Expression::Goto { target: BasicBlockIdentifier(target.as_usize()) },
                 format!("Assert: {:?}", cond),
             );
 
@@ -357,14 +327,7 @@ pub fn handle_terminator<'tcx, 'ccx>(
             return vec![stmt];
         }
 
-        TerminatorKind::InlineAsm {
-            template,
-            operands,
-            options,
-            line_spans,
-            targets,
-            unwind,
-        } => {
+        TerminatorKind::InlineAsm { template, operands, options, line_spans, targets, unwind } => {
             debug!(
                 "InlineAsm: {:?}, Operands: {:?}, Options: {:?}, Line Spans: {:?}, Targets: {:?}, Unwind: {:?}",
                 template, operands, options, line_spans, targets, unwind
@@ -377,9 +340,7 @@ pub fn handle_terminator<'tcx, 'ccx>(
                         if s.trim().is_empty() {
                             return vec![];
                         }
-                        vec![Statement::from_expression(Expression::InlineAsm {
-                            asm: s.clone(),
-                        })]
+                        vec![Statement::from_expression(Expression::InlineAsm { asm: s.clone() })]
                     }
 
                     rustc_ast::ast::InlineAsmTemplatePiece::Placeholder {
@@ -424,10 +385,7 @@ pub fn handle_bbs<'tcx, 'ccx>(fn_cx: &mut CodegenFunctionCx<'tcx, 'ccx>, c_fn: &
         let mut n_bb = BasicBlock::new(bb_id);
 
         // Print basic block for debugging. TODO should probably depend on a cli argument.
-        n_bb.push(Statement::from_comment(format!(
-            "Basic Block: {:?}",
-            block_data
-        )));
+        n_bb.push(Statement::from_comment(format!("Basic Block: {:?}", block_data)));
 
         for stmt in statements {
             n_bb.push(handle_stmt(fn_cx, c_fn, stmt));

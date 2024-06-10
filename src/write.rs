@@ -1,10 +1,11 @@
 use std::{fs::File, io::Write};
 
+use crate::alloc;
 use crate::bb::BasicBlock;
 use crate::bb::BasicBlockIdentifier;
+use crate::crepr::Representable;
 use crate::definition::CVarDef;
 use crate::expression::Expression;
-use crate::crepr::Representable;
 use crate::function;
 use crate::function::CFunction;
 use crate::header;
@@ -13,7 +14,6 @@ use crate::stmt::Statement;
 use crate::structure;
 use crate::ty::CIntTy;
 use crate::ty::CType;
-use crate::alloc;
 
 // Write includes to the file
 pub fn write_includes(
@@ -84,6 +84,7 @@ pub fn write_functions(functions: &mut Vec<function::CFunction>, file: &mut File
                 bb.push(Statement::from_expression(Expression::FnCall {
                     function: Box::new(Expression::Constant { value: r_main.get_name().into() }),
                     args: vec![],
+                    is_builtin: false,
                 }));
             }
 
@@ -107,6 +108,7 @@ pub fn write_functions(functions: &mut Vec<function::CFunction>, file: &mut File
                 bb.push(Statement::from_expression(Expression::FnCall {
                     function: Box::new(Expression::Constant { value: r_main.get_name().into() }),
                     args: vec![],
+                    is_builtin: false,
                 }));
             }
 

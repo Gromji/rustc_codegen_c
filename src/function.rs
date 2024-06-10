@@ -2,6 +2,7 @@ use crate::bb::{self, BasicBlock};
 use crate::crepr::{indent, Representable, RepresentationContext};
 use crate::definition::CVarDef;
 use crate::expression::Expression;
+use crate::structure;
 use crate::ty::CType;
 use crate::{base::OngoingCodegen, definition::CVarDecl};
 use rustc_const_eval::interpret::ConstAllocation;
@@ -58,8 +59,9 @@ impl<'tcx> CodegenFunctionCx<'tcx, '_> {
     fn handle_cosnt_alloc(&mut self, alloc: ConstAllocation, alloc_id: AllocId) -> Expression {
         let inner_alloc = alloc.inner();
 
-        let alloc_bytes: Vec<u8> =
-            inner_alloc.inspect_with_uninit_and_ptr_outside_interpreter(0..inner_alloc.len()).into();
+        let alloc_bytes: Vec<u8> = inner_alloc
+            .inspect_with_uninit_and_ptr_outside_interpreter(0..inner_alloc.len())
+            .into();
 
         let ptrs = inner_alloc.provenance().ptrs();
 
@@ -73,46 +75,36 @@ impl<'tcx> CodegenFunctionCx<'tcx, '_> {
             if let GlobalAlloc::Function(finstance) = reloc_target_alloc {
                 let fn_name = format_fn_name(&self.tcx.symbol_name(finstance));
 
-                ptr_declrs.push((
-                    offset as usize,
-                    Expression::Constant { value: fn_name },
-                ));
+                ptr_declrs.push((offset as usize, Expression::Constant { value: fn_name }));
             } else {
                 warn!("Not a function alloc: {:?}", reloc_target_alloc);
 
                 ptr_declrs.push((
                     offset as usize,
-                    Expression::Constant {
-                        value: format!("ptr_{}", offset),
-                    },
+                    Expression::Constant { value: format!("ptr_{}", offset) },
                 ));
             }
         }
 
         let alloc_name = format!("ALLOC_{}_CRATE_{}", alloc_id.0, self.crate_num);
 
-        let static_alloc = crate::alloc::StaticAllocation::new(
-            alloc_name.clone(),
-            alloc_bytes,
-            ptr_declrs,
-        );
+        let static_alloc =
+            crate::alloc::StaticAllocation::new(alloc_name.clone(), alloc_bytes, ptr_declrs);
 
         self.ongoing_codegen.context.add_static(static_alloc);
 
-        Expression::Constant {value: format!("&{}",alloc_name.clone())}
+        Expression::Constant { value: format!("&{}", alloc_name.clone()) }
     }
 
     pub fn handle_global_decl(&mut self, alloc: AllocId) -> Expression {
         if self.alloc_to_c.contains_key(&alloc) {
             return self.alloc_to_c[&alloc].clone();
         }
-        
+
         let global_alloc = self.tcx.global_alloc(alloc);
 
         let c_alloc = match global_alloc {
-            GlobalAlloc::Memory(const_alloc) => {
-                self.handle_cosnt_alloc(const_alloc, alloc)
-            }
+            GlobalAlloc::Memory(const_alloc) => self.handle_cosnt_alloc(const_alloc, alloc),
 
             _ => {
                 panic!("Global alloc not handled: {:?}", global_alloc);
@@ -161,6 +153,10 @@ impl Debug for CFunction {
 }
 
 impl CFunction {
+    pub const RETURN_STRUCT_FIELD_NAME: &'static str = "result";
+    pub const RETURN_STRUCT_PREFIX: &'static str = "t";
+    pub const RETURN_STRUCT_SUFFIX: &'static str = "ret";
+
     pub fn new(name: String, return_ty: CType) -> Self {
         Self {
             name: name,
@@ -178,6 +174,10 @@ impl CFunction {
 
     pub fn get_name(&self) -> &str {
         &self.name
+    }
+
+    pub fn get_ret_ty(&self) -> &CType {
+        &self.return_ty
     }
 
     pub fn push_bb(&mut self, bb: BasicBlock) {
@@ -301,6 +301,7 @@ pub fn handle_fn<'tcx, 'ccx>(
         ty::ParamEnv::reveal_all(),
         ty::EarlyBinder::bind(tcx.instance_mir(inst.def).clone()),
     );
+    let is_main = inst.to_string() == "main";
 
     let mut fn_cx = CodegenFunctionCx {
         tcx,
@@ -311,13 +312,32 @@ pub fn handle_fn<'tcx, 'ccx>(
         crate_num,
         alloc_to_c: alloc_to_c_map,
     };
+    let mut fn_name = format_fn_name(&tcx.symbol_name(inst));
+    // If is main prefix with "_"
+    if is_main {
+        fn_name = format!("_{}", fn_name);
+    }
 
-    let mut c_fn = CFunction::new(
-        format_fn_name(&tcx.symbol_name(inst)),
-        fn_cx.rust_to_c_type(&mono_mir.return_ty()),
+    let ret_struct_name = format!(
+        "{}_{}_{}",
+        CFunction::RETURN_STRUCT_PREFIX,
+        fn_name.as_str(),
+        CFunction::RETURN_STRUCT_SUFFIX
     );
+    warn!("{}\n{}", fn_name.as_str(), ret_struct_name.as_str());
+    let return_struct = structure::CComposite::Struct(structure::CStructDef {
+        name: ret_struct_name,
+        fields: vec![CVarDef::new(
+            0,
+            CFunction::RETURN_STRUCT_FIELD_NAME.to_string(),
+            fn_cx.rust_to_c_type(&mono_mir.return_ty()),
+        )],
+    });
+    let ret_info = fn_cx.ongoing_codegen.context.add_composite(&return_struct);
 
-    c_fn.is_main = inst.to_string() == "main";
+    let mut c_fn = CFunction::new(fn_name, CType::Struct(ret_info));
+
+    c_fn.is_main = is_main;
 
     // Pring mir of function for debugging
     print_mir(tcx, &mono_mir);
@@ -329,11 +349,6 @@ pub fn handle_fn<'tcx, 'ccx>(
 
     // Handle basic blocks
     bb::handle_bbs(&mut fn_cx, &mut c_fn);
-
-    // If is main prefix with "_"
-    if c_fn.is_main() {
-        c_fn.name = format!("_{}", c_fn.name);
-    }
 
     fn_cx.ongoing_codegen.context.get_mut_functions().push(c_fn);
 }
