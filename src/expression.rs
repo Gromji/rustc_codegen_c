@@ -397,7 +397,7 @@ impl Representable for Expression {
                             ch_ctx.var_name = Some("".to_string());
 
                             var_repr = format!(
-                                "({} ({}.{}))",
+                                "(({}) ({}.{}))",
                                 ty.repr_str(&ch_ctx),
                                 var_repr,
                                 FAT_PTR_DATA_FIELD

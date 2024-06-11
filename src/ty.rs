@@ -576,7 +576,9 @@ impl<'tcx> CodegenFunctionCx<'tcx, '_> {
             }
 
             rustc_middle::ty::Ref(_, ty, _) => {
-                CType::Pointer(Box::new(self.rust_to_c_type(ty)))
+                ty.is_sized(self.tcx, ParamEnv::reveal_all())
+                    .then(|| CType::Pointer(Box::new(self.rust_to_c_type(ty))))
+                    .unwrap_or_else(|| CType::FatPointer {})
             }
 
             rustc_middle::ty::Slice(ty) => self.rust_to_c_type(ty),
