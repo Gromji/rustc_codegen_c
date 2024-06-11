@@ -36,6 +36,7 @@ pub enum CType {
 }
 
 impl CType {
+    pub const WRAPPER_FIELD_NAME: &'static str = "wrapee";
     pub fn as_composite_info(&self) -> CCompositeInfo {
         match self {
             CType::Struct(info) | CType::Union(info) | CType::TaggedUnion(info) => info.clone(),
@@ -144,7 +145,6 @@ impl Representable for CType {
                     None => write!(f, "{c_type}"),
                 }
             }
-
             CType::Array(ty, size) => {
                 ty.repr(f, context)?;
 
@@ -372,6 +372,19 @@ impl<'tcx> CodegenFunctionCx<'tcx, '_> {
         "__WRAPPER_UNION_".to_string() + &name
     }
 
+    // Same as above
+    fn wrapper_name(&self, ty: CType) -> String {
+        let name: String = format!("{:?}", ty)
+            .chars()
+            .map(|c| match c {
+                ' ' | '*' | '[' | ']' => '_',
+                _ => c,
+            })
+            .collect();
+
+        "__WRAPPER_".to_string() + &name
+    }
+
     fn tuple_name(&self, fields: &Vec<CType>) -> String {
         if fields.len() == 0 {
             // not really necesasary but I've gotten used to the name
@@ -571,7 +584,18 @@ impl<'tcx> CodegenFunctionCx<'tcx, '_> {
             rustc_middle::ty::Slice(ty) => self.rust_to_c_type(ty),
 
             rustc_middle::ty::Array(ty, size) => {
-                CType::Array(Box::new(self.rust_to_c_type(ty)), utils::const_to_usize(size))
+                let arr_type =
+                    CType::Array(Box::new(self.rust_to_c_type(ty)), utils::const_to_usize(size));
+
+                let c_struct = CStructDef {
+                    name: self.wrapper_name(arr_type.clone()),
+                    fields: vec![CVarDef::new(0, CType::WRAPPER_FIELD_NAME.to_string(), arr_type)],
+                };
+
+                let struct_info =
+                    self.ongoing_codegen.context.add_composite(&CComposite::Struct(c_struct));
+
+                return CType::Struct(struct_info);
             }
 
             rustc_middle::ty::FnPtr(s) => {

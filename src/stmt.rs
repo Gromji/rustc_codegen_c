@@ -109,7 +109,7 @@ pub fn handle_place<'tcx, 'ccx>(
 
     let current_ty = fn_cx.ty_for_local(place.local);
 
-    let mut ctype =
+    let mut c_type =
         fn_cx.ctype_from_cache(&current_ty).expect("No ctype found in cache for rust type");
 
     for proj in place.projection {
@@ -117,10 +117,10 @@ pub fn handle_place<'tcx, 'ccx>(
             rustc_middle::mir::ProjectionElem::Field(field, ty) => {
                 debug!(
                     "Field: {:?}, Type: {:?}, current_ty: {:?}, next_ty: {:?}",
-                    field, ctype, current_ty, ty
+                    field, c_type, current_ty, ty
                 );
 
-                match ctype {
+                match c_type {
                     CType::Struct(info) | CType::Union(info) => {
                         access.push(VariableAccess::Field {
                             name: fn_cx
@@ -131,22 +131,28 @@ pub fn handle_place<'tcx, 'ccx>(
                         });
 
                         // shortcut to get the ctype of the next field
-                        ctype = fn_cx
+                        c_type = fn_cx
                             .ctype_from_cache(&ty)
                             .expect("No ctype found in cache for rust type");
                     }
                     _ => {
-                        error!("Expected struct type, got {:?}", ctype);
+                        error!("Expected struct type, got {:?}", c_type);
                     }
                 }
             }
             rustc_middle::mir::ProjectionElem::Index(idx_local) => {
+                if let CType::Struct(_) = c_type {
+                    access.push(VariableAccess::Unwrap);
+                }
                 access.push(VariableAccess::Index {
                     expression: Expression::unbvari(idx_local.as_usize()),
                 })
             }
 
             rustc_middle::mir::ProjectionElem::ConstantIndex { offset, .. } => {
+                if let CType::Struct(_) = c_type {
+                    access.push(VariableAccess::Unwrap);
+                }
                 access.push(VariableAccess::Index {
                     expression: Expression::const_int(offset as i128),
                 });
@@ -157,7 +163,7 @@ pub fn handle_place<'tcx, 'ccx>(
             }
 
             rustc_middle::mir::ProjectionElem::Downcast(_, variant_idx) => {
-                match ctype {
+                match c_type {
                     CType::TaggedUnion(union_info) => {
                         // access the union field
                         access.push(VariableAccess::Field {
@@ -181,12 +187,12 @@ pub fn handle_place<'tcx, 'ccx>(
                         access.push(VariableAccess::Field { name: variant_field.get_name() });
 
                         // set ctype to correct variant
-                        ctype = variant_field.get_type().clone();
+                        c_type = variant_field.get_type().clone();
                     }
 
                     _ => {
                         // unsure what other types might get downcast, for now just panic
-                        panic!("Expected tagged union type, got {:?}", ctype);
+                        panic!("Expected tagged union type, got {:?}", c_type);
                     }
                 }
             }
@@ -196,7 +202,7 @@ pub fn handle_place<'tcx, 'ccx>(
                     .ctype_from_cache(&current_ty.builtin_deref(true).unwrap())
                     .expect("No ctype found in cache for rust type");
 
-                match ctype {
+                match c_type {
                     CType::FatPointer => {
                         access.push(VariableAccess::FatPtrDereference { ty: next_ctype.clone() })
                     }
@@ -206,7 +212,7 @@ pub fn handle_place<'tcx, 'ccx>(
                     }
                 }
 
-                ctype = next_ctype;
+                c_type = next_ctype;
             }
 
             rustc_middle::mir::ProjectionElem::OpaqueCast(_) => {

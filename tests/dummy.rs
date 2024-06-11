@@ -40,6 +40,12 @@ fn main() {
     }
 
     let b = _a;
+    let x = func();
+}
+fn func() -> [u32; 4] {
+    let mut a = [1, 2, 3, 4];
+    a[0] = 5;
+    return a;
 }
 struct Te {
     a: i32,
@@ -69,7 +75,7 @@ trait TestTrait {
     fn test(&self) -> i32;
 }
 
-impl<T> TestTrait for Pair<i32, T>{
+impl<T> TestTrait for Pair<i32, T> {
     fn test(&self) -> i32 {
         self.first
     }
@@ -123,7 +129,7 @@ fn test() -> i32 {
     t = Te { a: 7, b: 8, pair: Pair { first: 128, second: true } };
     t.pair.first = 10;
     let p: Pair<i32, bool> = Pair::new(128, false);
-    let p2 = Pair::new(false,p.get_second());
+    let p2 = Pair::new(false, p.get_second());
     let k = 5;
     let pair = (128, t);
     let unkonwn = (128, true, 1.0);
