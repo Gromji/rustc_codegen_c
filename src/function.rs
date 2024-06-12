@@ -51,6 +51,7 @@ impl<'tcx> CodegenFunctionCx<'tcx, '_> {
         self.monomorphize(self.mir.local_decls[local].ty)
     }
 
+    #[allow(dead_code)]
     pub fn ctype_from_cache(&self, ty: &ty::Ty<'tcx>) -> Option<CType> {
         self.ty_to_c.get(ty).cloned()
     }

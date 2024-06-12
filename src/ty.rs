@@ -404,10 +404,11 @@ impl<'tcx> CodegenFunctionCx<'tcx, '_> {
             .inputs()
             .iter()
             .map(|ty| self.rust_to_c_type(ty))
-            .map(|ty| {
+            .map(|ty: CType| {
                 if erase_ptr_types {
+
                     match ty {
-                        CType::Pointer(_) => CType::Pointer(Box::new(CType::Void)),
+                        CType::Pointer(_) | CType::FatPointer => CType::Pointer(Box::new(CType::Void)),
                         _ => ty,
                     }
                 } else {
@@ -566,7 +567,11 @@ impl<'tcx> CodegenFunctionCx<'tcx, '_> {
 
             rustc_middle::ty::Dynamic(..) => CType::FatPointer {},
 
-            rustc_middle::ty::Ref(_, ty, _) => CType::Pointer(Box::new(self.rust_to_c_type(ty))),
+            rustc_middle::ty::Ref(_, ty, _) => {
+                ty.is_sized(self.tcx, ParamEnv::reveal_all())
+                    .then(|| CType::Pointer(Box::new(self.rust_to_c_type(ty))))
+                    .unwrap_or_else(|| CType::FatPointer {})
+            }
 
             rustc_middle::ty::Slice(ty) => self.rust_to_c_type(ty),
 

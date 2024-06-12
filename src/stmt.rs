@@ -1,6 +1,7 @@
 use crate::aggregate::handle_aggregate;
 use crate::crepr::{indent, Representable, RepresentationContext};
 use crate::expression::{Expression, VariableAccess};
+use crate::fatptr::FAT_PTR_META_FIELD;
 use crate::function::{CFunction, CodegenFunctionCx};
 use crate::header::handle_checked_op;
 use crate::structure::CTaggedUnionDef;
@@ -98,7 +99,7 @@ pub fn handle_stmt<'tcx, 'ccx>(
 }
 
 pub fn handle_place<'tcx, 'ccx>(
-    fn_cx: &CodegenFunctionCx<'tcx, 'ccx>,
+    fn_cx: &mut CodegenFunctionCx<'tcx, 'ccx>,
     place: &Place<'tcx>,
 ) -> Expression {
     // if the projection is empty, we can just return the variable
@@ -109,8 +110,7 @@ pub fn handle_place<'tcx, 'ccx>(
 
     let current_ty = fn_cx.ty_for_local(place.local);
 
-    let mut ctype =
-        fn_cx.ctype_from_cache(&current_ty).expect("No ctype found in cache for rust type");
+    let mut ctype = fn_cx.rust_to_c_type(&current_ty);
 
     for proj in place.projection {
         match proj {
@@ -131,9 +131,7 @@ pub fn handle_place<'tcx, 'ccx>(
                         });
 
                         // shortcut to get the ctype of the next field
-                        ctype = fn_cx
-                            .ctype_from_cache(&ty)
-                            .expect("No ctype found in cache for rust type");
+                        ctype = fn_cx.rust_to_c_type(&ty)
                     }
                     _ => {
                         error!("Expected struct type, got {:?}", ctype);
@@ -192,9 +190,7 @@ pub fn handle_place<'tcx, 'ccx>(
             }
 
             rustc_middle::mir::ProjectionElem::Deref => {
-                let next_ctype = fn_cx
-                    .ctype_from_cache(&current_ty.builtin_deref(true).unwrap())
-                    .expect("No ctype found in cache for rust type");
+                let next_ctype = fn_cx.rust_to_c_type(&current_ty.builtin_deref(true).unwrap());
 
                 match ctype {
                     CType::FatPointer => {
@@ -221,7 +217,7 @@ pub fn handle_place<'tcx, 'ccx>(
 }
 
 pub fn handle_operand<'tcx, 'ccx>(
-    fn_cx: &CodegenFunctionCx<'tcx, 'ccx>,
+    fn_cx: &mut CodegenFunctionCx<'tcx, 'ccx>,
     operand: &Operand<'tcx>,
 ) -> Expression {
     match operand {
@@ -233,7 +229,7 @@ pub fn handle_operand<'tcx, 'ccx>(
 }
 
 pub fn handle_operand_with_access<'tcx, 'ccx>(
-    fn_cx: &CodegenFunctionCx<'tcx, 'ccx>,
+    fn_cx: &mut CodegenFunctionCx<'tcx, 'ccx>,
     operand: &Operand<'tcx>,
     access: Vec<VariableAccess>,
 ) -> Expression {
@@ -275,7 +271,7 @@ fn handle_cast<'tcx, 'ccx>(
         CastKind::PointerCoercion(coercion_type) => {
             let target_kind = target_ty.builtin_deref(true).unwrap().kind();
             let source_deref_ty = source_ty.builtin_deref(true).unwrap();
-            let _source_ty = fn_cx.ctype_from_cache(&source_deref_ty).unwrap();
+            let _source_ty = fn_cx.rust_to_c_type(&source_deref_ty);
             debug!("PointerCoercion: {:?}", coercion_type);
             debug!("source type: {:?}", source_deref_ty);
 
@@ -283,20 +279,33 @@ fn handle_cast<'tcx, 'ccx>(
                 PointerCoercion::Unsize => {
                     debug!("Unsize");
 
-                    match target_kind {
-                        TyKind::Dynamic(data, _, _dyn_kind) => {
-                            let alloc_id = fn_cx
-                                .tcx
-                                .vtable_allocation((source_deref_ty.clone(), data.principal()));
-                            let vtable = fn_cx.handle_global_decl(alloc_id);
+                    if let TyKind::Dynamic(data, _, _dyn_kind) = target_kind {
+                        let alloc_id = fn_cx
+                            .tcx
+                            .vtable_allocation((source_deref_ty.clone(), data.principal()));
+                        let vtable = fn_cx.handle_global_decl(alloc_id);
 
-                            return Expression::fatptr(handle_operand(fn_cx, op), vtable);
-                        }
-
-                        _ => {
-                            panic!("Unhandled unsize operation for target kind: {:?}", target_kind);
-                        }
+                        return Expression::fatptr(handle_operand(fn_cx, op), vtable);
                     }
+
+                    if let TyKind::Array(_, len) = source_deref_ty.kind() {
+                        debug!("Array unsize");
+                        return Expression::fatptr(
+                            handle_operand(fn_cx, op),
+                            Expression::Constant {
+                                value: len
+                                    .try_eval_target_usize(fn_cx.tcx, ParamEnv::reveal_all())
+                                    .expect("Expected array size to be known")
+                                    .to_string(),
+                            },
+                        );
+                    }
+
+                    error!(
+                        "Unhandled unsize operation for target kind: {:?} from {:?}",
+                        target_kind, source_ty
+                    );
+                    return Expression::NoOp {};
                 }
 
                 _ => {
@@ -385,9 +394,39 @@ fn handle_assign<'tcx, 'ccx>(
             }
         }
 
-        Rvalue::Repeat(operand, len) => {
-            debug!("Assign REPEAT: {:?} {:?}. Ignoring", operand, len);
-            Expression::NoOp {}
+        Rvalue::Len(place) => {
+            let place_ty = fn_cx
+                .monomorphize(place.ty(&fn_cx.mir.local_decls, fn_cx.tcx))
+                .ty;
+
+            if let TyKind::Slice(_) = place_ty.kind() {
+                debug!("Assign LEN: {:?}", place);
+
+                if let Expression::Variable { local, access } = handle_place(fn_cx, place) {
+                    let mut modified_access = access;
+
+                    // last element will be a FatPtrDereference, which we can just ignore, since we only care about the metadata field
+                    modified_access.pop();
+
+                    modified_access.extend(vec![
+                        VariableAccess::Field {
+                            name: FAT_PTR_META_FIELD.to_string(),
+                        },
+                        VariableAccess::Cast {
+                            ty: CType::UInt(crate::ty::CUIntTy::UInt64),
+                        },
+                    ]);
+
+                    Expression::Variable {
+                        local,
+                        access: modified_access,
+                    }
+                } else {
+                    panic!("Expected place to be a variable");
+                }
+            } else {
+                panic!("Rvalue::Len not on slice: {:?}", place);
+            }
         }
 
         _ => {
