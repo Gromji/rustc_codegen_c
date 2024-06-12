@@ -405,7 +405,9 @@ impl Representable for Expression {
 
                         VariableAccess::FatPtrDereference { ty } => {
                             let mut ch_ctx = context.clone();
-                            ch_ctx.var_name = Some("".to_string());
+                            
+                            // remove any potential names in the ctx
+                            let _ = ch_ctx.get_variable_name_option();
 
                             var_repr = format!(
                                 "(({}) ({}.{}))",

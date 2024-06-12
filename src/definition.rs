@@ -28,7 +28,7 @@ impl CVarDef {
 
 impl Representable for CVarDef {
     fn repr(&self, f: &mut (dyn fmt::Write), context: &mut RepresentationContext) -> fmt::Result {
-        context.var_name = Some(self.name.clone());
+        context.set_variable_name(self.name.clone());
         self.ty.repr(f, context)
     }
 }

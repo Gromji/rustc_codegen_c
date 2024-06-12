@@ -140,7 +140,7 @@ impl Representable for CType {
                     "*".repeat(std::cmp::max((context.get_ptr_count() as i32) - 1, 0) as usize);
                 let c_type = format!("{}{}", FAT_PTR_NAME, ptrs);
 
-                match &context.var_name {
+                match context.get_variable_name_option() {
                     Some(name) => write!(f, "{c_type} {name}"),
                     None => write!(f, "{c_type}"),
                 }
@@ -377,6 +377,7 @@ impl<'tcx> CodegenFunctionCx<'tcx, '_> {
             let name = name.replace(",", "_");
             let name = name.replace(" ", "_");
             let name = name.replace("&", "_");
+            let name = name.replace("!", "_");
 
             return name;
         })()
@@ -501,7 +502,7 @@ impl<'tcx> CodegenFunctionCx<'tcx, '_> {
                                 .map(|(idx, field)| {
                                     CVarDef::new(
                                         idx,
-                                        field.name.to_string(),
+                                        format!("field_{}", field.name.to_string()),
                                         self.rust_to_c_type(&field.ty(self.tcx, generic_fields)),
                                     )
                                 })
@@ -656,6 +657,14 @@ impl<'tcx> CodegenFunctionCx<'tcx, '_> {
                     .normalize_erasing_late_bound_regions(ParamEnv::reveal_all(), *s);
 
                 self.fn_pointer_type(&sig)
+            }
+
+            rustc_middle::ty::Never => CType::Unit,
+
+            rustc_middle::ty::RawPtr(ty, _mutability) => {
+                let c_ty = self.rust_to_c_type(ty);
+
+                CType::Pointer(Box::new(c_ty))
             }
 
             _ => CType::from(ty),

@@ -148,7 +148,7 @@ pub fn handle_place<'tcx, 'ccx>(
                         ctype = fn_cx.rust_to_c_type(&ty)
                     }
                     _ => {
-                        error!("Expected struct type, got {:?}", ctype);
+                        warn!("Expected struct type, got {:?}", ctype);
                     }
                 }
             }
@@ -347,6 +347,20 @@ fn handle_cast<'tcx, 'ccx>(
                     panic!("Unhandled pointer coercion type: {:?}", coercion_type);
                 }
             }
+        }
+
+        CastKind::Transmute => {
+
+            if let CType::FatPointer = tgt_ty {
+                return handle_operand(fn_cx, op);
+            }
+
+            return handle_operand_with_access(fn_cx, op, 
+                vec![
+                    VariableAccess::Reference, 
+                    VariableAccess::Cast { ty: CType::Pointer(Box::new(tgt_ty)) }
+
+            ]);
         }
 
         _ => {
@@ -549,8 +563,10 @@ fn handle_const_value<'tcx, 'ccx>(
                 }
 
                 _ => {
-                    warn!("Unhandled scalar kind: {:?}", ty.kind());
-                    return Expression::NoOp {};
+                    warn!("Unhandled scalar kind: {:?} just assuming an int", ty.kind());
+                    return Expression::Constant {
+                        value: format!("{}", utils::scalar_to_u128(&scalar)),
+                    };
                 }
             },
 
