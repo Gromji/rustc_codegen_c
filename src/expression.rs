@@ -142,6 +142,7 @@ pub enum VariableAccess {
     Dereference,
     Field { name: String },
     Index { expression: Expression },
+    Unwrap,
     Cast { ty: CType },
     FatPtrDereference { ty: CType },
 }
@@ -258,9 +259,12 @@ impl Expression {
     pub fn arr_vari(local: usize, idx: usize) -> Box<Expression> {
         Box::new(Expression::Variable {
             local,
-            access: vec![VariableAccess::Index {
-                expression: Expression::const_int(idx as i128),
-            }],
+            access: vec![
+                VariableAccess::Unwrap,
+                VariableAccess::Index {
+                    expression: Expression::const_int(idx as i128),
+                },
+            ],
         })
     }
     pub fn vari(local: usize) -> Box<Expression> {
@@ -390,6 +394,9 @@ impl Representable for Expression {
 
                         VariableAccess::Index { expression } => {
                             var_repr = format! {"{}[{}]", var_repr, expression.repr_str(context)};
+                        }
+                        VariableAccess::Unwrap => {
+                            var_repr = format!("{}.{}", var_repr, CType::WRAPPER_FIELD_NAME);
                         }
 
                         VariableAccess::Cast { ty } => {

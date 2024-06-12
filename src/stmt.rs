@@ -153,12 +153,18 @@ pub fn handle_place<'tcx, 'ccx>(
                 }
             }
             rustc_middle::mir::ProjectionElem::Index(idx_local) => {
+                if let CType::Struct(_) = ctype {
+                    access.push(VariableAccess::Unwrap);
+                }
                 access.push(VariableAccess::Index {
                     expression: Expression::unbvari(idx_local.as_usize()),
                 })
             }
 
             rustc_middle::mir::ProjectionElem::ConstantIndex { offset, .. } => {
+                if let CType::Struct(_) = ctype {
+                    access.push(VariableAccess::Unwrap);
+                }
                 access.push(VariableAccess::Index {
                     expression: Expression::const_int(offset as i128),
                 });
