@@ -337,6 +337,8 @@ impl CCompositeInfo {
 
 impl<'tcx> CodegenFunctionCx<'tcx, '_> {
     pub fn rust_to_c_type(&mut self, ty: &Ty<'tcx>) -> CType {
+        debug!("Rust to C type: {:?}", ty);
+
         if self.ty_to_c.contains_key(ty) {
             return self.ty_to_c[ty].clone();
         }
@@ -406,9 +408,10 @@ impl<'tcx> CodegenFunctionCx<'tcx, '_> {
             .map(|ty| self.rust_to_c_type(ty))
             .map(|ty: CType| {
                 if erase_ptr_types {
-
                     match ty {
-                        CType::Pointer(_) | CType::FatPointer => CType::Pointer(Box::new(CType::Void)),
+                        CType::Pointer(_) | CType::FatPointer => {
+                            CType::Pointer(Box::new(CType::Void))
+                        }
                         _ => ty,
                     }
                 } else {
@@ -427,6 +430,8 @@ impl<'tcx> CodegenFunctionCx<'tcx, '_> {
 
         match ty.kind() {
             rustc_middle::ty::Tuple(types) => {
+                debug!("Tuple: {:?}", types);
+
                 let field_types: Vec<CType> =
                     types.iter().map(|x| self.rust_to_c_type(&x)).collect();
 
@@ -451,116 +456,126 @@ impl<'tcx> CodegenFunctionCx<'tcx, '_> {
                 return CType::Struct(struct_info);
             }
 
-            rustc_middle::ty::Adt(adt_def, generic_fields) => match adt_def.adt_kind() {
-                rustc_middle::ty::AdtKind::Struct => {
-                    let c_struct = CStructDef {
-                        name: self.composite_name(adt_def.did(), generic_fields),
-                        fields: adt_def
-                            .all_fields()
-                            .enumerate()
-                            .map(|(idx, field)| {
-                                CVarDef::new(
-                                    idx,
-                                    field.name.to_string(),
-                                    self.rust_to_c_type(&field.ty(self.tcx, generic_fields)),
-                                )
-                            })
-                            .collect(),
-                    };
-
-                    let struct_info =
-                        self.ongoing_codegen.context.add_composite(&CComposite::Struct(c_struct));
-
-                    return CType::Struct(struct_info);
-                }
-
-                rustc_middle::ty::AdtKind::Union => {
-                    let c_struct = CStructDef {
-                        name: self.composite_name(adt_def.did(), generic_fields),
-                        fields: adt_def
-                            .all_fields()
-                            .enumerate()
-                            .map(|(idx, field)| {
-                                CVarDef::new(
-                                    idx,
-                                    field.name.to_string(),
-                                    self.rust_to_c_type(&field.ty(self.tcx, generic_fields)),
-                                )
-                            })
-                            .collect(),
-                    };
-
-                    let struct_info =
-                        self.ongoing_codegen.context.add_composite(&CComposite::Union(c_struct));
-
-                    return CType::Union(struct_info);
-                }
-
-                rustc_middle::ty::AdtKind::Enum => {
-                    let mut variant_infos: Vec<CVarDef> = Vec::new();
-
-                    for (idx, variant) in adt_def.variants().iter().enumerate() {
-                        let variant_fields: Vec<CType> = variant
-                            .fields
-                            .iter()
-                            .map(|field| {
-                                let ty = field.ty(self.tcx, generic_fields);
-                                self.rust_to_c_type(&ty)
-                            })
-                            .collect();
-
-                        // build and save structs for each of the enum variants
+            rustc_middle::ty::Adt(adt_def, generic_fields) => {
+                debug!("Adt: {:?}", adt_def.adt_kind());
+                match adt_def.adt_kind() {
+                    rustc_middle::ty::AdtKind::Struct => {
                         let c_struct = CStructDef {
-                            name: self.composite_name(variant.def_id, generic_fields),
-                            fields: variant_fields
-                                .iter()
+                            name: self.composite_name(adt_def.did(), generic_fields),
+                            fields: adt_def
+                                .all_fields()
                                 .enumerate()
-                                .map(|(idx, ty)| {
-                                    CVarDef::new(idx, format!("field_{idx}"), ty.clone())
+                                .map(|(idx, field)| {
+                                    CVarDef::new(
+                                        idx,
+                                        field.name.to_string(),
+                                        self.rust_to_c_type(&field.ty(self.tcx, generic_fields)),
+                                    )
                                 })
                                 .collect(),
                         };
 
-                        let composite_info = self
+                        let struct_info = self
                             .ongoing_codegen
                             .context
                             .add_composite(&CComposite::Struct(c_struct));
 
-                        // save each struct as a CVarDef for the union
-                        variant_infos.push(CVarDef::new(
-                            idx,
-                            format!("variant_{}", idx),
-                            CType::Struct(composite_info),
-                        ));
+                        return CType::Struct(struct_info);
                     }
 
-                    // create the actual union as a type
-                    let union_def = CStructDef {
-                        name: self.wrapper_union_name(adt_def.did(), generic_fields),
-                        fields: variant_infos,
-                    };
+                    rustc_middle::ty::AdtKind::Union => {
+                        let c_struct = CStructDef {
+                            name: self.composite_name(adt_def.did(), generic_fields),
+                            fields: adt_def
+                                .all_fields()
+                                .enumerate()
+                                .map(|(idx, field)| {
+                                    CVarDef::new(
+                                        idx,
+                                        field.name.to_string(),
+                                        self.rust_to_c_type(&field.ty(self.tcx, generic_fields)),
+                                    )
+                                })
+                                .collect(),
+                        };
 
-                    let union_info =
-                        self.ongoing_codegen.context.add_composite(&CComposite::Union(union_def));
+                        let struct_info = self
+                            .ongoing_codegen
+                            .context
+                            .add_composite(&CComposite::Union(c_struct));
 
-                    let discr_type = self.rust_to_c_type(&ty.discriminant_ty(self.tcx));
+                        return CType::Union(struct_info);
+                    }
 
-                    let tagged_union_def = CTaggedUnionDef::new(
-                        self.composite_name(adt_def.did(), generic_fields),
-                        discr_type,
-                        CType::Union(union_info),
-                    );
+                    rustc_middle::ty::AdtKind::Enum => {
+                        let mut variant_infos: Vec<CVarDef> = Vec::new();
 
-                    let tagged_union_info = self
-                        .ongoing_codegen
-                        .context
-                        .add_composite(&CComposite::TaggedUnion(tagged_union_def));
+                        for (idx, variant) in adt_def.variants().iter().enumerate() {
+                            let variant_fields: Vec<CType> = variant
+                                .fields
+                                .iter()
+                                .map(|field| {
+                                    let ty = field.ty(self.tcx, generic_fields);
+                                    self.rust_to_c_type(&ty)
+                                })
+                                .collect();
 
-                    return CType::TaggedUnion(tagged_union_info);
+                            // build and save structs for each of the enum variants
+                            let c_struct = CStructDef {
+                                name: self.composite_name(variant.def_id, generic_fields),
+                                fields: variant_fields
+                                    .iter()
+                                    .enumerate()
+                                    .map(|(idx, ty)| {
+                                        CVarDef::new(idx, format!("field_{idx}"), ty.clone())
+                                    })
+                                    .collect(),
+                            };
+
+                            let composite_info = self
+                                .ongoing_codegen
+                                .context
+                                .add_composite(&CComposite::Struct(c_struct));
+
+                            // save each struct as a CVarDef for the union
+                            variant_infos.push(CVarDef::new(
+                                idx,
+                                format!("variant_{}", idx),
+                                CType::Struct(composite_info),
+                            ));
+                        }
+
+                        // create the actual union as a type
+                        let union_def = CStructDef {
+                            name: self.wrapper_union_name(adt_def.did(), generic_fields),
+                            fields: variant_infos,
+                        };
+
+                        let union_info = self
+                            .ongoing_codegen
+                            .context
+                            .add_composite(&CComposite::Union(union_def));
+
+                        let discr_type = self.rust_to_c_type(&ty.discriminant_ty(self.tcx));
+
+                        let tagged_union_def = CTaggedUnionDef::new(
+                            self.composite_name(adt_def.did(), generic_fields),
+                            discr_type,
+                            CType::Union(union_info),
+                        );
+
+                        let tagged_union_info = self
+                            .ongoing_codegen
+                            .context
+                            .add_composite(&CComposite::TaggedUnion(tagged_union_def));
+
+                        return CType::TaggedUnion(tagged_union_info);
+                    }
                 }
-            },
+            }
 
             rustc_middle::ty::Closure(_def, args) => {
+                debug!("Closure: {:?}", args);
                 let closure = args.as_closure();
                 self.rust_to_c_type(&closure.tupled_upvars_ty())
             }
@@ -568,18 +583,24 @@ impl<'tcx> CodegenFunctionCx<'tcx, '_> {
             rustc_middle::ty::Dynamic(..) => CType::FatPointer {},
 
             rustc_middle::ty::Ref(_, ty, _) => {
+                debug!("Ref: {:?}", ty);
                 ty.is_sized(self.tcx, ParamEnv::reveal_all())
                     .then(|| CType::Pointer(Box::new(self.rust_to_c_type(ty))))
                     .unwrap_or_else(|| CType::FatPointer {})
             }
 
-            rustc_middle::ty::Slice(ty) => self.rust_to_c_type(ty),
+            rustc_middle::ty::Slice(_ty) => {
+                debug!("Slice: {:?}", _ty);
+                CType::FatPointer {}
+            }
 
             rustc_middle::ty::Array(ty, size) => {
+                debug!("Array: {:?}, {:?}", ty, size);
                 CType::Array(Box::new(self.rust_to_c_type(ty)), utils::const_to_usize(size))
             }
 
             rustc_middle::ty::FnPtr(s) => {
+                debug!("FnPtr: {:?}", s);
                 let sig = self.tcx.normalize_erasing_late_bound_regions(ParamEnv::reveal_all(), *s);
 
                 self.fn_pointer_type(&sig)

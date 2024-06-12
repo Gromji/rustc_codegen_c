@@ -59,8 +59,9 @@ impl<'tcx> CodegenFunctionCx<'tcx, '_> {
     fn handle_cosnt_alloc(&mut self, alloc: ConstAllocation, alloc_id: AllocId) -> Expression {
         let inner_alloc = alloc.inner();
 
-        let alloc_bytes: Vec<u8> =
-            inner_alloc.inspect_with_uninit_and_ptr_outside_interpreter(0..inner_alloc.len()).into();
+        let alloc_bytes: Vec<u8> = inner_alloc
+            .inspect_with_uninit_and_ptr_outside_interpreter(0..inner_alloc.len())
+            .into();
 
         let ptrs = inner_alloc.provenance().ptrs();
 
@@ -74,46 +75,36 @@ impl<'tcx> CodegenFunctionCx<'tcx, '_> {
             if let GlobalAlloc::Function(finstance) = reloc_target_alloc {
                 let fn_name = format_fn_name(&self.tcx.symbol_name(finstance));
 
-                ptr_declrs.push((
-                    offset as usize,
-                    Expression::Constant { value: fn_name },
-                ));
+                ptr_declrs.push((offset as usize, Expression::Constant { value: fn_name }));
             } else {
                 warn!("Not a function alloc: {:?}", reloc_target_alloc);
 
                 ptr_declrs.push((
                     offset as usize,
-                    Expression::Constant {
-                        value: format!("ptr_{}", offset),
-                    },
+                    Expression::Constant { value: format!("ptr_{}", offset) },
                 ));
             }
         }
 
         let alloc_name = format!("ALLOC_{}_CRATE_{}", alloc_id.0, self.crate_num);
 
-        let static_alloc = crate::alloc::StaticAllocation::new(
-            alloc_name.clone(),
-            alloc_bytes,
-            ptr_declrs,
-        );
+        let static_alloc =
+            crate::alloc::StaticAllocation::new(alloc_name.clone(), alloc_bytes, ptr_declrs);
 
         self.ongoing_codegen.context.add_static(static_alloc);
 
-        Expression::Constant {value: format!("&{}",alloc_name.clone())}
+        Expression::Constant { value: format!("&{}", alloc_name.clone()) }
     }
 
     pub fn handle_global_decl(&mut self, alloc: AllocId) -> Expression {
         if self.alloc_to_c.contains_key(&alloc) {
             return self.alloc_to_c[&alloc].clone();
         }
-        
+
         let global_alloc = self.tcx.global_alloc(alloc);
 
         let c_alloc = match global_alloc {
-            GlobalAlloc::Memory(const_alloc) => {
-                self.handle_cosnt_alloc(const_alloc, alloc)
-            }
+            GlobalAlloc::Memory(const_alloc) => self.handle_cosnt_alloc(const_alloc, alloc),
 
             _ => {
                 panic!("Global alloc not handled: {:?}", global_alloc);
