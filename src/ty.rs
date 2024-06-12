@@ -404,10 +404,11 @@ impl<'tcx> CodegenFunctionCx<'tcx, '_> {
             .inputs()
             .iter()
             .map(|ty| self.rust_to_c_type(ty))
-            .map(|ty| {
+            .map(|ty: CType| {
                 if erase_ptr_types {
+
                     match ty {
-                        CType::Pointer(_) => CType::Pointer(Box::new(CType::Void)),
+                        CType::Pointer(_) | CType::FatPointer => CType::Pointer(Box::new(CType::Void)),
                         _ => ty,
                     }
                 } else {
