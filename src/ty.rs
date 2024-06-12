@@ -53,7 +53,7 @@ impl Representable for CType {
         match self {
             // Custom struct for Rust's Unit type
             CType::Unit => {
-                let ptrs = "*".repeat(context.n_ptr.into());
+                let ptrs = "*".repeat(context.get_ptr_count().into());
                 let c_type = format!("__Unit{}", ptrs);
                 match context.get_variable_name_option() {
                     Some(name) => write!(f, "{c_type} {name}"),
@@ -61,7 +61,7 @@ impl Representable for CType {
                 }
             }
             CType::Void => {
-                let ptrs = "*".repeat(context.n_ptr.into());
+                let ptrs = "*".repeat(context.get_ptr_count().into());
                 let c_type = format!("void{}", ptrs);
                 match context.get_variable_name_option() {
                     Some(name) => write!(f, "{c_type} {name}"),
@@ -69,7 +69,7 @@ impl Representable for CType {
                 }
             }
             CType::Bool => {
-                let ptrs = "*".repeat(context.n_ptr.into());
+                let ptrs = "*".repeat(context.get_ptr_count().into());
                 let c_type = format!("bool{}", ptrs);
                 match context.get_variable_name_option() {
                     Some(name) => write!(f, "{c_type} {name}"),
@@ -77,7 +77,7 @@ impl Representable for CType {
                 }
             }
             CType::Char => {
-                let ptrs = "*".repeat(context.n_ptr.into());
+                let ptrs = "*".repeat(context.get_ptr_count().into());
                 let c_type = format!("char32_t{}", ptrs);
                 match context.get_variable_name_option() {
                     Some(name) => write!(f, "{c_type} {name}"),
@@ -85,7 +85,7 @@ impl Representable for CType {
                 }
             }
             CType::Int(i) => {
-                let ptrs = "*".repeat(context.n_ptr.into());
+                let ptrs = "*".repeat(context.get_ptr_count().into());
                 let c_type = format!("{}{}", i.name_str(), ptrs);
                 match context.get_variable_name_option() {
                     Some(name) => write!(f, "{c_type} {name}"),
@@ -93,7 +93,7 @@ impl Representable for CType {
                 }
             }
             CType::UInt(u) => {
-                let ptrs = "*".repeat(context.n_ptr.into());
+                let ptrs = "*".repeat(context.get_ptr_count().into());
                 let c_type = format!("{}{}", u.name_str(), ptrs);
                 match context.get_variable_name_option() {
                     Some(name) => write!(f, "{c_type} {name}"),
@@ -101,7 +101,7 @@ impl Representable for CType {
                 }
             }
             CType::Float(float) => {
-                let ptrs = "*".repeat(context.n_ptr.into());
+                let ptrs = "*".repeat(context.get_ptr_count().into());
                 let c_type = format!("{}{}", float.name_str(), ptrs);
                 match context.get_variable_name_option() {
                     Some(name) => write!(f, "{c_type} {name}"),
@@ -111,7 +111,7 @@ impl Representable for CType {
 
             CType::TaggedUnion(info) | CType::Struct(info) | CType::Union(info) => {
                 let struct_name = &info.name;
-                let ptrs = "*".repeat(context.n_ptr.into());
+                let ptrs = "*".repeat(context.get_ptr_count().into());
                 let c_type = format!("{struct_name}{ptrs}");
                 match context.get_variable_name_option() {
                     Some(name) => write!(f, "{c_type} {name}"),
@@ -120,7 +120,7 @@ impl Representable for CType {
             }
             // Incorrectly implemented, needs fix!
             CType::Enum => {
-                let ptrs = "*".repeat(context.n_ptr.into());
+                let ptrs = "*".repeat(context.get_ptr_count().into());
                 let _c_type = format!("enum{}", ptrs);
                 match context.get_variable_name_option() {
                     Some(name) => write!(f, "enum {name}"),
@@ -128,15 +128,15 @@ impl Representable for CType {
                 }
             }
             CType::Pointer(ty) => {
-                context.n_ptr += 1;
+                context.increment_ptr_count();
                 ty.repr(f, context)?;
-                context.n_ptr -= 1;
                 Ok(())
             }
 
             CType::FatPointer => {
                 // remove one pointer level
-                let ptrs = "*".repeat(std::cmp::max((context.n_ptr as i32) - 1, 0) as usize);
+                let ptrs =
+                    "*".repeat(std::cmp::max((context.get_ptr_count() as i32) - 1, 0) as usize);
                 let c_type = format!("{}{}", FAT_PTR_NAME, ptrs);
 
                 match &context.var_name {
@@ -146,6 +146,17 @@ impl Representable for CType {
             }
 
             CType::Array(ty, size) => {
+                let ptr_cnt = context.get_ptr_count();
+                if ptr_cnt > 0 {
+                    let var_name = match context.get_variable_name_option() {
+                        Some(name) => name,
+                        None => "".to_string(),
+                    };
+                    ty.repr(f, context)?;
+
+                    return write!(f, "{} {}", "*".repeat(ptr_cnt.into()), var_name);
+                }
+
                 ty.repr(f, context)?;
 
                 let var_name = match context.get_variable_name_option() {
@@ -153,9 +164,7 @@ impl Representable for CType {
                     None => "".to_string(),
                 };
 
-                if context.n_ptr > 0 {
-                    write!(f, "{} {}", "*".repeat(context.n_ptr.into()), var_name)
-                } else if *size as u32 == 0 {
+                if *size as u32 == 0 {
                     write!(f, "{}[]", var_name)
                 } else {
                     write!(f, "{}[{}]", var_name, size)
