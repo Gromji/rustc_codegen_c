@@ -531,6 +531,16 @@ fn handle_const_value<'tcx>(val: &ConstValue, ty: &Ty) -> Expression {
                     };
                 }
 
+                rustc_middle::ty::TyKind::Char => {
+                    return Expression::Constant {
+                        value: format!("'{}'", scalar.to_char().unwrap()),
+                    };
+                }
+
+                rustc_middle::ty::TyKind::Str => {
+                    return Expression::Constant { value: format!("\"{}\"", scalar.to_string()) };
+                }
+
                 _ => {
                     warn!("Unhandled scalar kind: {:?}", ty.kind());
                     return Expression::NoOp {};
@@ -546,6 +556,31 @@ fn handle_const_value<'tcx>(val: &ConstValue, ty: &Ty) -> Expression {
                 value: ty.to_string(),
             };
         }
+
+        rustc_middle::mir::ConstValue::Slice { data, meta } => {
+            debug!("Const Alloc: {:?} meta: {:?}", data, meta);
+
+            let inner_alloc = data.inner();
+
+            let alloc_bytes: Vec<u8> = inner_alloc
+                .inspect_with_uninit_and_ptr_outside_interpreter(0..inner_alloc.len())
+                .into();
+
+            let byte_data = alloc_bytes
+                .iter()
+                .map(|b| format!("\\x{:02x}", b))
+                .collect::<Vec<String>>()
+                .join("");
+
+            Expression::fatptr(
+                Expression::Constant { value: format!("\"{}\"", byte_data) },
+                Expression::Cast {
+                    ty: CType::UInt(crate::ty::CUIntTy::UInt64),
+                    value: Box::new(Expression::const_int(*meta as i128)),
+                },
+            )
+        }
+
         _ => {
             warn!("Unhandled constant: {:?}", val);
             return Expression::NoOp {};

@@ -81,9 +81,7 @@ impl<'tcx> CodegenFunctionCx<'tcx, '_> {
 
                 ptr_declrs.push((
                     offset as usize,
-                    Expression::Constant {
-                        value: format!("ptr_{}", offset),
-                    },
+                    Expression::Constant { value: format!("ptr_{}", offset) },
                 ));
             }
         }
