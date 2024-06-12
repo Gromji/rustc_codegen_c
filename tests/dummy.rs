@@ -42,8 +42,8 @@ fn main() {
     let b = _a;
 }
 struct Te {
-    a: i32,
-    b: i32,
+    _a: i32,
+    _b: i32,
     pair: Pair<i32, bool>,
 }
 struct Pair<T, U> {
@@ -56,6 +56,7 @@ impl<T, V> Pair<T, V> {
         Pair { first, second }
     }
 
+    #[allow(dead_code)]
     fn get_first(&self) -> &T {
         &self.first
     }
@@ -81,34 +82,34 @@ fn test_dyn(a: &dyn TestTrait) -> i32 {
 
 enum TestEnum {
     A(i32, i32, i32),
-    B(i32),
-    C,
+    _B(i32),
+    _C,
 }
 
 enum PlainEnum {
     A,
-    B,
-    C,
+    _B,
+    _C,
 }
 
 union TestUnion {
     a: i32,
-    b: f32,
+    _b: f32,
 }
 
 fn test_enum(a: TestEnum) -> i32 {
     match a {
         TestEnum::A(a, b, c) => a + b + c,
-        TestEnum::B(_) => 0,
-        TestEnum::C => 1,
+        TestEnum::_B(_) => 0,
+        TestEnum::_C => 1,
     }
 }
 
 fn test_plain_enum(a: PlainEnum) -> i32 {
     match a {
         PlainEnum::A => 0,
-        PlainEnum::B => 1,
-        PlainEnum::C => 2,
+        PlainEnum::_B => 1,
+        PlainEnum::_C => 2,
     }
 }
 
@@ -120,7 +121,7 @@ fn test_plain_union(a: TestUnion) -> i32 {
 
 fn test() -> i32 {
     let mut t: Te;
-    t = Te { a: 7, b: 8, pair: Pair { first: 128, second: true } };
+    t = Te { _a: 7, _b: 8, pair: Pair { first: 128, second: true } };
     t.pair.first = 10;
     let p: Pair<i32, bool> = Pair::new(128, false);
     let p2 = Pair::new(false,p.get_second());
