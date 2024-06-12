@@ -76,7 +76,7 @@ trait TestTrait {
     fn test(&self) -> i32;
 }
 
-impl<T> TestTrait for Pair<i32, T>{
+impl<T> TestTrait for Pair<i32, T> {
     fn test(&self) -> i32 {
         self.first
     }
@@ -127,10 +127,17 @@ fn test_plain_union(a: TestUnion) -> i32 {
 
 fn test() -> i32 {
     let mut t: Te;
-    t = Te { _a: 7, _b: 8, pair: Pair { first: 128, second: true } };
+    t = Te {
+        _a: 7,
+        _b: 8,
+        pair: Pair {
+            first: 128,
+            second: true,
+        },
+    };
     t.pair.first = 10;
     let p: Pair<i32, bool> = Pair::new(128, false);
-    let p2 = Pair::new(false,p.get_second());
+    let p2 = Pair::new(false, p.get_second());
     let k = 5;
     let pair = (128, t);
     let unkonwn = (128, true, 1.0);

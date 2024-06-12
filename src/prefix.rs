@@ -14,7 +14,9 @@ use crate::stmt::Statement;
 
 pub fn build_prefix(context: &mut Context) {
     // Header Includes
-    context.get_mut_h_includes().append(&mut prefix_header_includes());
+    context
+        .get_mut_h_includes()
+        .append(&mut prefix_header_includes());
     // Functions
     context.get_mut_functions().append(&mut prefix_functions());
     // Structs
@@ -52,11 +54,18 @@ fn prefix_functions() -> Vec<CFunction> {
 
     let mut main = CFunction::new("main".to_string(), CType::Int(CIntTy::Int32));
 
-    main.add_signature_var(CVarDef::new(0, "argc".to_string(), CType::Int(CIntTy::Int32)));
+    main.add_signature_var(CVarDef::new(
+        0,
+        "argc".to_string(),
+        CType::Int(CIntTy::Int32),
+    ));
     main.add_signature_var(CVarDef::new(
         1,
         "argv".to_string(),
-        CType::Array(Box::new(CType::Pointer(Box::new(CType::Int(CIntTy::Int8)))), 0),
+        CType::Array(
+            Box::new(CType::Pointer(Box::new(CType::Int(CIntTy::Int8)))),
+            0,
+        ),
     ));
 
     // TODO: rewrite main.push("setlocale(LC_ALL, \"\");\n", false, 1);
@@ -76,8 +85,6 @@ fn prefix_functions() -> Vec<CFunction> {
 
 // List of starter structs
 fn prefix_structs() -> Vec<CComposite> {
-    let structs: Vec<CComposite> = vec![
-        new_fat_ptr(),
-    ];
+    let structs: Vec<CComposite> = vec![new_fat_ptr()];
     structs
 }

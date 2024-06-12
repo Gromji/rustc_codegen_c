@@ -18,27 +18,19 @@ pub fn scalar_to_u128(value: &Scalar) -> u128 {
 
 pub fn scalar_to_float(value: &Scalar) -> String {
     match value {
-        Scalar::Int(i) =>{
+        Scalar::Int(i) => {
             return match i.size().bytes() {
-                2 => {
-                    i.to_f16().to_string()
-                }
+                2 => i.to_f16().to_string(),
 
-                4 => {
-                    i.to_f32().to_string()
-                },
+                4 => i.to_f32().to_string(),
 
-                8 => {
-                    i.to_f64().to_string()
-                },
+                8 => i.to_f64().to_string(),
 
-                16  => {
-                    i.to_f128().to_string()
-                },
-                
-                _ => panic!("Unsupported float size!")
+                16 => i.to_f128().to_string(),
+
+                _ => panic!("Unsupported float size!"),
             }
-        } 
+        }
         Scalar::Ptr(_, _) => panic!("Trying to get value of a pointer that is not supported!"),
     }
 }

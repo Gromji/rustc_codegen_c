@@ -58,7 +58,13 @@ pub trait Representable {
         f: &mut (dyn fmt::Write),
         context: &mut RepresentationContext,
     ) -> fmt::Result {
-        self.repr(f, &mut RepresentationContext { indent: context.indent + 1, ..context.clone() })
+        self.repr(
+            f,
+            &mut RepresentationContext {
+                indent: context.indent + 1,
+                ..context.clone()
+            },
+        )
     }
 
     fn default_repr_str(&self) -> String {
@@ -82,5 +88,9 @@ pub trait Representable {
 }
 
 pub fn indent(f: &mut (dyn fmt::Write), context: &RepresentationContext) -> fmt::Result {
-    write!(f, "{}", context.indent_string.as_str().repeat(context.indent))
+    write!(
+        f,
+        "{}",
+        context.indent_string.as_str().repeat(context.indent)
+    )
 }

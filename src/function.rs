@@ -81,7 +81,9 @@ impl<'tcx> CodegenFunctionCx<'tcx, '_> {
 
                 ptr_declrs.push((
                     offset as usize,
-                    Expression::Constant { value: format!("ptr_{}", offset) },
+                    Expression::Constant {
+                        value: format!("ptr_{}", offset),
+                    },
                 ));
             }
         }
@@ -93,7 +95,9 @@ impl<'tcx> CodegenFunctionCx<'tcx, '_> {
 
         self.ongoing_codegen.context.add_static(static_alloc);
 
-        Expression::Constant { value: format!("&{}", alloc_name.clone()) }
+        Expression::Constant {
+            value: format!("&{}", alloc_name.clone()),
+        }
     }
 
     pub fn handle_global_decl(&mut self, alloc: AllocId) -> Expression {

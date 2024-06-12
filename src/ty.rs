@@ -331,7 +331,10 @@ pub struct CCompositeInfo {
 
 impl CCompositeInfo {
     pub fn new(name: &String, ctx_idx: usize) -> Self {
-        Self { name: name.clone(), ctx_idx }
+        Self {
+            name: name.clone(),
+            ctx_idx,
+        }
     }
 }
 
@@ -355,7 +358,10 @@ impl<'tcx> CodegenFunctionCx<'tcx, '_> {
         // it's improtant to preserve information before :: to avoid conflicts with types from other crates, if we ever get around to that
 
         with_no_trimmed_paths!(|| {
-            let name = self.tcx.def_path_str_with_args(def, args).replace("::", "__");
+            let name = self
+                .tcx
+                .def_path_str_with_args(def, args)
+                .replace("::", "__");
 
             let name = name.replace("<", "_");
             let name = name.replace(">", "");
@@ -422,7 +428,10 @@ impl<'tcx> CodegenFunctionCx<'tcx, '_> {
 
         let output = self.rust_to_c_type(&sig.output());
 
-        CType::FunctionPtr(Box::new(CFuncPtrInfo { args: inputs, ret: Box::new(output) }))
+        CType::FunctionPtr(Box::new(CFuncPtrInfo {
+            args: inputs,
+            ret: Box::new(output),
+        }))
     }
 
     fn rust_to_c_type_internal(&mut self, ty: &Ty<'tcx>) -> CType {
@@ -450,8 +459,10 @@ impl<'tcx> CodegenFunctionCx<'tcx, '_> {
                         .collect(),
                 };
 
-                let struct_info =
-                    self.ongoing_codegen.context.add_composite(&CComposite::Struct(c_struct));
+                let struct_info = self
+                    .ongoing_codegen
+                    .context
+                    .add_composite(&CComposite::Struct(c_struct));
 
                 return CType::Struct(struct_info);
             }
@@ -596,12 +607,17 @@ impl<'tcx> CodegenFunctionCx<'tcx, '_> {
 
             rustc_middle::ty::Array(ty, size) => {
                 debug!("Array: {:?}, {:?}", ty, size);
-                CType::Array(Box::new(self.rust_to_c_type(ty)), utils::const_to_usize(size))
+                CType::Array(
+                    Box::new(self.rust_to_c_type(ty)),
+                    utils::const_to_usize(size),
+                )
             }
 
             rustc_middle::ty::FnPtr(s) => {
                 debug!("FnPtr: {:?}", s);
-                let sig = self.tcx.normalize_erasing_late_bound_regions(ParamEnv::reveal_all(), *s);
+                let sig = self
+                    .tcx
+                    .normalize_erasing_late_bound_regions(ParamEnv::reveal_all(), *s);
 
                 self.fn_pointer_type(&sig)
             }
@@ -619,12 +635,12 @@ impl<'tcx> From<&Ty<'tcx>> for CType {
             rustc_middle::ty::Bool => CType::Bool,
             rustc_middle::ty::Char => CType::Char,
             rustc_middle::ty::Str => CType::Array(Box::new(CType::Char), 0),
-            rustc_middle::ty::Uint(u) => {
-                CType::UInt(CUIntTy::from(u.bit_width().unwrap_or(CUIntTy::DEFAULT_BIT_WIDTH)))
-            }
-            rustc_middle::ty::Int(i) => {
-                CType::Int(CIntTy::from(i.bit_width().unwrap_or(CIntTy::DEFAULT_BIT_WIDTH)))
-            }
+            rustc_middle::ty::Uint(u) => CType::UInt(CUIntTy::from(
+                u.bit_width().unwrap_or(CUIntTy::DEFAULT_BIT_WIDTH),
+            )),
+            rustc_middle::ty::Int(i) => CType::Int(CIntTy::from(
+                i.bit_width().unwrap_or(CIntTy::DEFAULT_BIT_WIDTH),
+            )),
             rustc_middle::ty::Float(float) => CType::Float(CFloatTy::from(float.bit_width())),
 
             _ => {

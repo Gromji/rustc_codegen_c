@@ -62,10 +62,17 @@ pub fn handle_checked_op<'tcx, 'ccx>(
             .get_struct_def(&info)
             .expect("Struct not found for provided info")
     } else {
-        panic!("Expected struct type as return of checked_op, return ty {:?}", place_ty);
+        panic!(
+            "Expected struct type as return of checked_op, return ty {:?}",
+            place_ty
+        );
     };
 
-    if !fn_cx.ongoing_codegen.context.exists_header_fn_with_name(fn_name.as_str()) {
+    if !fn_cx
+        .ongoing_codegen
+        .context
+        .exists_header_fn_with_name(fn_name.as_str())
+    {
         debug!("Function for {fn_name} not found, creating one!");
         let checked_op = match op {
             BinOpType::CheckedAdd => {
@@ -93,7 +100,11 @@ pub fn handle_checked_op<'tcx, 'ccx>(
                 todo!("Checked operation not handled: {:?}", op);
             }
         };
-        fn_cx.ongoing_codegen.context.get_mut_header_functions().push(checked_op);
+        fn_cx
+            .ongoing_codegen
+            .context
+            .get_mut_header_functions()
+            .push(checked_op);
     }
     span.exit();
     Expression::FnCall {
@@ -113,25 +124,40 @@ fn extremum_val_of_type<'tcx, 'ccx>(
             let max_int = format!("INT{bit_width}_MAX");
             let min_int = format!("INT{bit_width}_MIN");
             if bit_width == 128 {
-                if !fn_cx.ongoing_codegen.context.has_define_with_name(&max_uint) {
+                if !fn_cx
+                    .ongoing_codegen
+                    .context
+                    .has_define_with_name(&max_uint)
+                {
                     //#define UINT128_MAX (__uint128_t)(-1)
                     fn_cx
                         .ongoing_codegen
                         .context
                         .get_mut_defines()
-                        .push(CDefine::new(max_uint.clone(), "(__uint128_t)(-1)".to_string()));
+                        .push(CDefine::new(
+                            max_uint.clone(),
+                            "(__uint128_t)(-1)".to_string(),
+                        ));
                 }
                 if !fn_cx.ongoing_codegen.context.has_define_with_name(&max_int) {
                     //#define INT128_MAX (__int128_t)(UINT128_MAX >> 1)
-                    fn_cx.ongoing_codegen.context.get_mut_defines().push(CDefine::new(
-                        max_int.clone(),
-                        format!("(__int128_t)({max_uint} >> 1)"),
-                    ));
+                    fn_cx
+                        .ongoing_codegen
+                        .context
+                        .get_mut_defines()
+                        .push(CDefine::new(
+                            max_int.clone(),
+                            format!("(__int128_t)({max_uint} >> 1)"),
+                        ));
                     //#define INT128_MIN (__int128_t)(-INT128_MAX - 1)
-                    fn_cx.ongoing_codegen.context.get_mut_defines().push(CDefine::new(
-                        min_int.clone(),
-                        "(__int128_t)(-INT128_MAX - 1)".to_string(),
-                    ));
+                    fn_cx
+                        .ongoing_codegen
+                        .context
+                        .get_mut_defines()
+                        .push(CDefine::new(
+                            min_int.clone(),
+                            "(__int128_t)(-INT128_MAX - 1)".to_string(),
+                        ));
                 }
             }
             (max_int, min_int)
@@ -140,13 +166,20 @@ fn extremum_val_of_type<'tcx, 'ccx>(
             let bit_width = c_uint_ty.bit_width();
             let max_uint = format!("UINT{bit_width}_MAX");
             if bit_width == 128 {
-                if !fn_cx.ongoing_codegen.context.has_define_with_name(&max_uint) {
+                if !fn_cx
+                    .ongoing_codegen
+                    .context
+                    .has_define_with_name(&max_uint)
+                {
                     //#define UINT128_MAX (uint128_t)(-1)
                     fn_cx
                         .ongoing_codegen
                         .context
                         .get_mut_defines()
-                        .push(CDefine::new(max_uint.clone(), "(uint128_t)(-1)".to_string()));
+                        .push(CDefine::new(
+                            max_uint.clone(),
+                            "(uint128_t)(-1)".to_string(),
+                        ));
                 }
             }
             (max_uint, "0".to_string())
@@ -248,8 +281,16 @@ fn signed_sub<'tcx, 'ccx>(
     let difference_type = field.get_type();
     let (max_int_str, min_int_str) = extremum_val_of_type(fn_cx, difference_type);
     let mut c_fn = CFunction::new(fn_name.clone(), return_type.clone());
-    c_fn.add_signature_var(CVarDef::new(0, "first".to_string(), difference_type.clone()));
-    c_fn.add_signature_var(CVarDef::new(1, "second".to_string(), difference_type.clone()));
+    c_fn.add_signature_var(CVarDef::new(
+        0,
+        "first".to_string(),
+        difference_type.clone(),
+    ));
+    c_fn.add_signature_var(CVarDef::new(
+        1,
+        "second".to_string(),
+        difference_type.clone(),
+    ));
     c_fn.add_var_decl(CVarDecl::new(
         CVarDef::new(2, "difference".to_string(), difference_type.clone()),
         Some(Expression::vari(0) - Expression::vari(1)),
@@ -297,8 +338,16 @@ fn unsigned_sub<'tcx, 'ccx>(
     let difference_type = field.get_type();
     let mut c_fn = CFunction::new(fn_name.clone(), return_type.clone());
 
-    c_fn.add_signature_var(CVarDef::new(0, "first".to_string(), difference_type.clone()));
-    c_fn.add_signature_var(CVarDef::new(1, "second".to_string(), difference_type.clone()));
+    c_fn.add_signature_var(CVarDef::new(
+        0,
+        "first".to_string(),
+        difference_type.clone(),
+    ));
+    c_fn.add_signature_var(CVarDef::new(
+        1,
+        "second".to_string(),
+        difference_type.clone(),
+    ));
     c_fn.add_var_decl(CVarDecl::new(
         CVarDef::new(2, "difference".to_string(), difference_type.clone()),
         Some(Expression::vari(0) - Expression::vari(1)),

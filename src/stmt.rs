@@ -23,15 +23,24 @@ pub struct Statement {
 
 impl Statement {
     pub fn new(expression: Expression, comment: String) -> Self {
-        Self { expression: Some(expression), comment: (Some(comment)) }
+        Self {
+            expression: Some(expression),
+            comment: (Some(comment)),
+        }
     }
 
     pub fn from_expression(expression: Expression) -> Self {
-        Self { expression: Some(expression), comment: None }
+        Self {
+            expression: Some(expression),
+            comment: None,
+        }
     }
 
     pub fn from_comment(comment: String) -> Self {
-        Self { expression: None, comment: Some(comment) }
+        Self {
+            expression: None,
+            comment: Some(comment),
+        }
     }
 }
 
@@ -82,7 +91,11 @@ pub fn handle_stmt<'tcx, 'ccx>(
             let exp = handle_assign(fn_cx, c_fn, &val.0, &val.1);
 
             if let Expression::Assignment { lhs: _, rhs } = &exp {
-                if matches!(**rhs, Expression::NoOp {}) { Expression::NoOp {} } else { exp }
+                if matches!(**rhs, Expression::NoOp {}) {
+                    Expression::NoOp {}
+                } else {
+                    exp
+                }
             } else {
                 exp
             }
@@ -176,7 +189,9 @@ pub fn handle_place<'tcx, 'ccx>(
 
                         // access the variant
                         let variant_field = &union_def.fields[variant_idx.as_usize()];
-                        access.push(VariableAccess::Field { name: variant_field.get_name() });
+                        access.push(VariableAccess::Field {
+                            name: variant_field.get_name(),
+                        });
 
                         // set ctype to correct variant
                         ctype = variant_field.get_type().clone();
@@ -193,9 +208,9 @@ pub fn handle_place<'tcx, 'ccx>(
                 let next_ctype = fn_cx.rust_to_c_type(&current_ty.builtin_deref(true).unwrap());
 
                 match ctype {
-                    CType::FatPointer => {
-                        access.push(VariableAccess::FatPtrDereference { ty: next_ctype.clone() })
-                    }
+                    CType::FatPointer => access.push(VariableAccess::FatPtrDereference {
+                        ty: next_ctype.clone(),
+                    }),
 
                     _ => {
                         access.push(VariableAccess::Dereference);
@@ -213,7 +228,10 @@ pub fn handle_place<'tcx, 'ccx>(
         }
     }
 
-    return Expression::Variable { local: place.local.as_usize(), access };
+    return Expression::Variable {
+        local: place.local.as_usize(),
+        access,
+    };
 }
 
 pub fn handle_operand<'tcx, 'ccx>(
@@ -235,10 +253,17 @@ pub fn handle_operand_with_access<'tcx, 'ccx>(
 ) -> Expression {
     let mut expression = handle_operand(fn_cx, operand);
 
-    if let Expression::Variable { local, access: old_access } = expression {
+    if let Expression::Variable {
+        local,
+        access: old_access,
+    } = expression
+    {
         let mut new_access = old_access;
         new_access.extend(access);
-        expression = Expression::Variable { local, access: new_access };
+        expression = Expression::Variable {
+            local,
+            access: new_access,
+        };
     } else {
         panic!("Expected variable expression from handle_operand");
     }
@@ -256,7 +281,10 @@ fn handle_cast<'tcx, 'ccx>(
 ) -> Expression {
     let _span = debug_span!("handle_cast").entered();
 
-    debug!("Assign CAST: {:?}, op: {:?}, target: {:?}", kind, op, target_ty);
+    debug!(
+        "Assign CAST: {:?}, op: {:?}, target: {:?}",
+        kind, op, target_ty
+    );
 
     let source_ty = op.ty(&fn_cx.mir.local_decls, fn_cx.tcx);
     let tgt_ty = fn_cx.rust_to_c_type(target_ty);
@@ -348,7 +376,11 @@ fn handle_assign<'tcx, 'ccx>(
                 BinOp::AddWithOverflow | BinOp::SubWithOverflow | BinOp::MulWithOverflow => {
                     handle_checked_op(fn_cx, op.into(), lhs, rhs, &ty, &place_ty)
                 }
-                _ => Expression::BinaryOp { op: op.into(), lhs: Box::new(lhs), rhs: Box::new(rhs) },
+                _ => Expression::BinaryOp {
+                    op: op.into(),
+                    lhs: Box::new(lhs),
+                    rhs: Box::new(rhs),
+                },
             }
         }
         Rvalue::Aggregate(kind, fields) => {
@@ -363,7 +395,10 @@ fn handle_assign<'tcx, 'ccx>(
             if let Expression::Variable { local, access } = place {
                 let mut new_access = access.clone();
                 new_access.push(VariableAccess::Reference);
-                Expression::Variable { local, access: new_access }
+                Expression::Variable {
+                    local,
+                    access: new_access,
+                }
             } else {
                 panic!("Expected place to be a variable");
             }
@@ -386,9 +421,13 @@ fn handle_assign<'tcx, 'ccx>(
 
             if let Expression::Variable { local, access } = handle_place(fn_cx, place) {
                 let mut modified_access = access;
-                modified_access
-                    .push(VariableAccess::Field { name: CTaggedUnionDef::TAG_NAME.to_string() });
-                Expression::Variable { local, access: modified_access }
+                modified_access.push(VariableAccess::Field {
+                    name: CTaggedUnionDef::TAG_NAME.to_string(),
+                });
+                Expression::Variable {
+                    local,
+                    access: modified_access,
+                }
             } else {
                 unreachable!("non variable for handle_place")
             }
@@ -493,7 +532,9 @@ fn handle_const_value<'tcx>(val: &ConstValue, ty: &Ty) -> Expression {
                 }
 
                 rustc_middle::ty::TyKind::Str => {
-                    return Expression::Constant { value: format!("\"{}\"", scalar.to_string()) };
+                    return Expression::Constant {
+                        value: format!("\"{}\"", scalar.to_string()),
+                    };
                 }
 
                 _ => {
@@ -507,7 +548,9 @@ fn handle_const_value<'tcx>(val: &ConstValue, ty: &Ty) -> Expression {
 
         rustc_middle::mir::ConstValue::ZeroSized => {
             debug!("Zerosized kind {:?}, val {:?}", ty.kind(), ty);
-            return Expression::Constant { value: ty.to_string() };
+            return Expression::Constant {
+                value: ty.to_string(),
+            };
         }
 
         rustc_middle::mir::ConstValue::Slice { data, meta } => {
@@ -526,7 +569,9 @@ fn handle_const_value<'tcx>(val: &ConstValue, ty: &Ty) -> Expression {
                 .join("");
 
             Expression::fatptr(
-                Expression::Constant { value: format!("\"{}\"", byte_data) },
+                Expression::Constant {
+                    value: format!("\"{}\"", byte_data),
+                },
                 Expression::Cast {
                     ty: CType::UInt(crate::ty::CUIntTy::UInt64),
                     value: Box::new(Expression::const_int(*meta as i128)),
