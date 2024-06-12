@@ -2,6 +2,8 @@
 
 #![allow(unused_variables)]
 fn main() {
+    let a = "123";
+    test_len(a);
     let _a = 1;
     let k1: f32 = 10.1;
     let k2: f32 = 20.0;
@@ -55,6 +57,10 @@ struct Te {
 struct Pair<T, U> {
     first: T,
     second: U,
+}
+
+fn test_len(a: &str) -> usize {
+    a.len()
 }
 
 impl<T, V> Pair<T, V> {

@@ -11,7 +11,7 @@ pub fn const_to_u128(value: &Const) -> u128 {
 
 pub fn scalar_to_u128(value: &Scalar) -> u128 {
     match value {
-        Scalar::Int(i) => i.try_to_uint(i.size()).unwrap(),
+        Scalar::Int(i) => i.to_uint(i.size()),
         Scalar::Ptr(_, _) => panic!("Trying to get value of a pointer that is not supported!"),
     }
 }
@@ -20,16 +20,16 @@ pub fn scalar_to_float(value: &Scalar) -> String {
     match value {
         Scalar::Int(i) => {
             return match i.size().bytes() {
-                2 => i.try_to_f16().unwrap().to_string(),
+                2 => i.to_f16().to_string(),
 
-                4 => i.try_to_f32().unwrap().to_string(),
+                4 => i.to_f32().to_string(),
 
-                8 => i.try_to_f64().unwrap().to_string(),
+                8 => i.to_f64().to_string(),
 
-                16 => i.try_to_f128().unwrap().to_string(),
+                16 => i.to_f128().to_string(),
 
                 _ => panic!("Unsupported float size!"),
-            };
+            }
         }
         Scalar::Ptr(_, _) => panic!("Trying to get value of a pointer that is not supported!"),
     }
