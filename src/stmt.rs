@@ -271,13 +271,8 @@ fn handle_cast<'tcx, 'ccx>(
         CastKind::PointerCoercion(coercion_type) => {
             let target_kind = target_ty.builtin_deref(true).unwrap().kind();
             let source_deref_ty = source_ty.builtin_deref(true).unwrap();
-            let _source_ty = fn_cx.ctype_from_cache(&source_deref_ty).unwrap();
+            let _source_ty = fn_cx.rust_to_c_type(&source_deref_ty);
             debug!("PointerCoercion: {:?}", coercion_type);
-            debug!("source type: {:?}", source_deref_ty);
-
-            let source_deref_ty = source_ty.builtin_deref(true).unwrap();
-            let target_kind = target_ty.builtin_deref(true).unwrap().kind();
-            let _source_ty = fn_cx.ctype_from_cache(&source_deref_ty).unwrap();
             debug!("source type: {:?}", source_deref_ty);
 
             match coercion_type {
