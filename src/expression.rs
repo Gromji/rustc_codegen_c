@@ -218,29 +218,52 @@ pub enum Expression {
 impl Expression {
     /// Returns Expression::Assignment
     pub fn assign(&self, rhs: Box<Expression>) -> Expression {
-        Expression::Assignment { lhs: Box::new(self.clone()), rhs }
+        Expression::Assignment {
+            lhs: Box::new(self.clone()),
+            rhs,
+        }
     }
     pub fn gt(&self, rhs: Box<Expression>) -> Box<Expression> {
-        Box::new(Expression::BinaryOp { op: BinOpType::Gt, lhs: Box::new(self.clone()), rhs })
+        Box::new(Expression::BinaryOp {
+            op: BinOpType::Gt,
+            lhs: Box::new(self.clone()),
+            rhs,
+        })
     }
     pub fn lt(&self, rhs: Box<Expression>) -> Box<Expression> {
-        Box::new(Expression::BinaryOp { op: BinOpType::Lt, lhs: Box::new(self.clone()), rhs })
+        Box::new(Expression::BinaryOp {
+            op: BinOpType::Lt,
+            lhs: Box::new(self.clone()),
+            rhs,
+        })
     }
     pub fn neq(&self, rhs: Box<Expression>) -> Box<Expression> {
-        Box::new(Expression::BinaryOp { op: BinOpType::Ne, lhs: Box::new(self.clone()), rhs })
+        Box::new(Expression::BinaryOp {
+            op: BinOpType::Ne,
+            lhs: Box::new(self.clone()),
+            rhs,
+        })
     }
     pub fn equ(&self, rhs: Box<Expression>) -> Box<Expression> {
-        Box::new(Expression::BinaryOp { op: BinOpType::Eq, lhs: Box::new(self.clone()), rhs })
+        Box::new(Expression::BinaryOp {
+            op: BinOpType::Eq,
+            lhs: Box::new(self.clone()),
+            rhs,
+        })
     }
     pub fn constant(value: &String) -> Box<Expression> {
-        Box::new(Expression::Constant { value: value.clone() })
+        Box::new(Expression::Constant {
+            value: value.clone(),
+        })
     }
     pub fn arr_vari(local: usize, idx: usize) -> Box<Expression> {
         Box::new(Expression::Variable {
             local,
             access: vec![
                 VariableAccess::Unwrap,
-                VariableAccess::Index { expression: Expression::const_int(idx as i128) },
+                VariableAccess::Index {
+                    expression: Expression::const_int(idx as i128),
+                },
             ],
         })
     }
@@ -248,19 +271,26 @@ impl Expression {
         Box::new(Expression::unbvari(local))
     }
     pub fn unbvari(local: usize) -> Expression {
-        Expression::Variable { local, access: Vec::new() }
+        Expression::Variable {
+            local,
+            access: Vec::new(),
+        }
     }
     pub fn strct(name: Box<Expression>, fields: Vec<Expression>) -> Box<Expression> {
         Box::new(Expression::Struct { name, fields })
     }
 
     pub fn const_int(value: i128) -> Expression {
-        Expression::Constant { value: value.to_string() }
+        Expression::Constant {
+            value: value.to_string(),
+        }
     }
 
     pub fn fatptr(data: Expression, meta: Expression) -> Expression {
         Expression::Struct {
-            name: Box::new(Expression::Constant { value: FAT_PTR_NAME.to_string() }),
+            name: Box::new(Expression::Constant {
+                value: FAT_PTR_NAME.to_string(),
+            }),
             fields: vec![data, meta],
         }
     }
@@ -269,42 +299,66 @@ impl Add for Box<Expression> {
     type Output = Self;
 
     fn add(self, rhs: Self) -> Self {
-        Box::new(Expression::BinaryOp { op: BinOpType::Add, lhs: self, rhs })
+        Box::new(Expression::BinaryOp {
+            op: BinOpType::Add,
+            lhs: self,
+            rhs,
+        })
     }
 }
 impl Sub for Box<Expression> {
     type Output = Self;
 
     fn sub(self, rhs: Self) -> Self {
-        Box::new(Expression::BinaryOp { op: BinOpType::Sub, lhs: self, rhs })
+        Box::new(Expression::BinaryOp {
+            op: BinOpType::Sub,
+            lhs: self,
+            rhs,
+        })
     }
 }
 impl Mul for Box<Expression> {
     type Output = Self;
 
     fn mul(self, rhs: Self) -> Self {
-        Box::new(Expression::BinaryOp { op: BinOpType::Mul, lhs: self, rhs })
+        Box::new(Expression::BinaryOp {
+            op: BinOpType::Mul,
+            lhs: self,
+            rhs,
+        })
     }
 }
 impl Div for Box<Expression> {
     type Output = Self;
 
     fn div(self, rhs: Self) -> Self {
-        Box::new(Expression::BinaryOp { op: BinOpType::Div, lhs: self, rhs })
+        Box::new(Expression::BinaryOp {
+            op: BinOpType::Div,
+            lhs: self,
+            rhs,
+        })
     }
 }
 impl BitOr for Box<Expression> {
     type Output = Self;
 
     fn bitor(self, rhs: Self) -> Self {
-        Box::new(Expression::BinaryOp { op: BinOpType::Or, lhs: self, rhs })
+        Box::new(Expression::BinaryOp {
+            op: BinOpType::Or,
+            lhs: self,
+            rhs,
+        })
     }
 }
 impl BitAnd for Box<Expression> {
     type Output = Self;
 
     fn bitand(self, rhs: Self) -> Self {
-        Box::new(Expression::BinaryOp { op: BinOpType::And, lhs: self, rhs })
+        Box::new(Expression::BinaryOp {
+            op: BinOpType::And,
+            lhs: self,
+            rhs,
+        })
     }
 }
 
@@ -450,7 +504,11 @@ impl Representable for Expression {
                 Ok(())
             }
 
-            Expression::SwitchJump { value, cases, default } => {
+            Expression::SwitchJump {
+                value,
+                cases,
+                default,
+            } => {
                 write!(f, "switch (")?;
                 value.repr(f, context)?;
                 write!(f, ")")?;

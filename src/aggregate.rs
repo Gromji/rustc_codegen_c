@@ -33,19 +33,27 @@ pub fn handle_aggregate<'tcx, 'ccx>(
 
                 debug!("Tuple with fields {:?}", field_expressions);
                 let rhs = Expression::Struct {
-                    name: Box::new(Expression::Constant { value: struct_info.name.clone() }),
+                    name: Box::new(Expression::Constant {
+                        value: struct_info.name.clone(),
+                    }),
                     fields: field_expressions,
                 };
 
                 let lhs = handle_place(fn_cx, place);
-                Expression::Assignment { lhs: Box::new(lhs), rhs: Box::new(rhs) }
+                Expression::Assignment {
+                    lhs: Box::new(lhs),
+                    rhs: Box::new(rhs),
+                }
             }
             _ => {
                 debug!("Non struct encountered in aggregate, must be unboxed tuple");
                 assert!(fields.len() == 1);
                 let expression = handle_operand(fn_cx, fields.iter().next().unwrap());
                 let lhs = handle_place(fn_cx, place);
-                Expression::Assignment { lhs: Box::new(lhs), rhs: Box::new(expression) }
+                Expression::Assignment {
+                    lhs: Box::new(lhs),
+                    rhs: Box::new(expression),
+                }
             }
         },
         AggregateKind::Array(_) => {
@@ -59,7 +67,9 @@ pub fn handle_aggregate<'tcx, 'ccx>(
                 });
             }
 
-            Expression::Array { fields: field_expressions }
+            Expression::Array {
+                fields: field_expressions,
+            }
         }
 
         AggregateKind::Adt(_, variant_idx, _, _, active_field_idx) => match var_type {
@@ -70,16 +80,24 @@ pub fn handle_aggregate<'tcx, 'ccx>(
                     field_expressions.push(expression);
                 }
                 let rhs = Expression::Struct {
-                    name: Box::new(Expression::Constant { value: struct_info.name.clone() }),
+                    name: Box::new(Expression::Constant {
+                        value: struct_info.name.clone(),
+                    }),
                     fields: field_expressions,
                 };
                 let lhs = handle_place(fn_cx, place);
-                Expression::Assignment { lhs: Box::new(lhs), rhs: Box::new(rhs) }
+                Expression::Assignment {
+                    lhs: Box::new(lhs),
+                    rhs: Box::new(rhs),
+                }
             }
 
             CType::Union(union_info) => {
-                let union_def =
-                    fn_cx.ongoing_codegen.context.get_composite(union_info).as_struct_def();
+                let union_def = fn_cx
+                    .ongoing_codegen
+                    .context
+                    .get_composite(union_info)
+                    .as_struct_def();
 
                 let active_field = &union_def.fields[active_field_idx.unwrap().as_usize()];
 
@@ -101,13 +119,18 @@ pub fn handle_aggregate<'tcx, 'ccx>(
                 };
 
                 let rhs = Expression::NamedStruct {
-                    name: Box::new(Expression::Constant { value: union_def.name.clone() }),
+                    name: Box::new(Expression::Constant {
+                        value: union_def.name.clone(),
+                    }),
 
                     fields: field_expressions,
                 };
 
                 let lhs = handle_place(fn_cx, place);
-                Expression::Assignment { lhs: Box::new(lhs), rhs: Box::new(rhs) }
+                Expression::Assignment {
+                    lhs: Box::new(lhs),
+                    rhs: Box::new(rhs),
+                }
             }
 
             CType::TaggedUnion(union_info) => {
@@ -120,12 +143,18 @@ pub fn handle_aggregate<'tcx, 'ccx>(
 
                 let discriminant = ty.discriminant_for_variant(fn_cx.tcx, variant_idx).unwrap();
 
-                let t_union_def =
-                    fn_cx.ongoing_codegen.context.get_composite(union_info).as_tagged_union_def();
+                let t_union_def = fn_cx
+                    .ongoing_codegen
+                    .context
+                    .get_composite(union_info)
+                    .as_tagged_union_def();
 
                 let union_info = t_union_def.union_var.get_type().as_composite_info();
-                let union_def =
-                    fn_cx.ongoing_codegen.context.get_composite(&union_info).as_struct_def();
+                let union_def = fn_cx
+                    .ongoing_codegen
+                    .context
+                    .get_composite(&union_info)
+                    .as_struct_def();
 
                 let union_variant_field = &union_def.fields[variant_idx.as_usize()];
                 let union_variant_struct = fn_cx
@@ -146,7 +175,9 @@ pub fn handle_aggregate<'tcx, 'ccx>(
                         ),
                     },
                     Expression::NamedStruct {
-                        name: Box::new(Expression::Constant { value: union_info.name.clone() }),
+                        name: Box::new(Expression::Constant {
+                            value: union_info.name.clone(),
+                        }),
 
                         fields: vec![(
                             union_variant_field.get_name(),
@@ -161,13 +192,18 @@ pub fn handle_aggregate<'tcx, 'ccx>(
                 ];
 
                 let rhs = Expression::Struct {
-                    name: Box::new(Expression::Constant { value: t_union_def.name.clone() }),
+                    name: Box::new(Expression::Constant {
+                        value: t_union_def.name.clone(),
+                    }),
                     fields: outside_field_expressions,
                 };
 
                 let lhs = handle_place(fn_cx, place);
 
-                Expression::Assignment { lhs: Box::new(lhs), rhs: Box::new(rhs) }
+                Expression::Assignment {
+                    lhs: Box::new(lhs),
+                    rhs: Box::new(rhs),
+                }
             }
 
             _ => {
@@ -178,7 +214,10 @@ pub fn handle_aggregate<'tcx, 'ccx>(
 
         AggregateKind::Closure(def, args) => {
             let closure = args.as_closure();
-            debug!("Closure encountered, with defid: {:?}, args: {:?}", def, closure);
+            debug!(
+                "Closure encountered, with defid: {:?}, args: {:?}",
+                def, closure
+            );
 
             let closure_arg_struct = fn_cx.rust_to_c_type(&closure.tupled_upvars_ty());
 
@@ -191,12 +230,17 @@ pub fn handle_aggregate<'tcx, 'ccx>(
                 }
 
                 let rhs = Expression::Struct {
-                    name: Box::new(Expression::Constant { value: struct_info.name.clone() }),
+                    name: Box::new(Expression::Constant {
+                        value: struct_info.name.clone(),
+                    }),
                     fields: field_expressions,
                 };
 
                 let lhs = handle_place(fn_cx, place);
-                Expression::Assignment { lhs: Box::new(lhs), rhs: Box::new(rhs) }
+                Expression::Assignment {
+                    lhs: Box::new(lhs),
+                    rhs: Box::new(rhs),
+                }
             } else {
                 panic!("Expected closure arg struct to be a struct");
             }

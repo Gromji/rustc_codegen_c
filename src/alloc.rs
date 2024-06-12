@@ -37,7 +37,13 @@ impl StaticAllocation {
         from: usize,
         to: usize,
     ) -> fmt::Result {
-        write!(f, "int8_t {}{}[{}];", StaticAllocation::BYTES_PREFIX, bytes_num, to - from)
+        write!(
+            f,
+            "int8_t {}{}[{}];",
+            StaticAllocation::BYTES_PREFIX,
+            bytes_num,
+            to - from
+        )
     }
 
     fn build_ptr_definition(
@@ -51,7 +57,9 @@ impl StaticAllocation {
             "void* {}{}; /* offset {} */",
             StaticAllocation::PTRS_PREFIX,
             ptr_idx,
-            self.ptrs.get(ptr_idx).map_or_else(|| 0, |(offset, _)| *offset)
+            self.ptrs
+                .get(ptr_idx)
+                .map_or_else(|| 0, |(offset, _)| *offset)
         )
     }
 
@@ -74,7 +82,9 @@ impl StaticAllocation {
     }
 
     fn next_ptr_offset(&self, ptr_idx: usize) -> usize {
-        self.ptrs.get(ptr_idx).map_or_else(|| self.bytes.len(), |(offset, _)| *offset)
+        self.ptrs
+            .get(ptr_idx)
+            .map_or_else(|| self.bytes.len(), |(offset, _)| *offset)
     }
 
     fn build_declaration(

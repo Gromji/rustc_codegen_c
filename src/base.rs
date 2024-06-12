@@ -19,14 +19,15 @@ use core::panic;
 use rustc_codegen_ssa::{CodegenResults, CompiledModule, CrateInfo};
 use rustc_metadata::EncodedMetadata;
 
+use rustc_middle::mir::interpret::AllocId;
 use rustc_middle::mir::mono::{CodegenUnit, MonoItem};
 use rustc_middle::ty::print::with_no_trimmed_paths;
-use rustc_middle::mir::interpret::AllocId;
 use rustc_session::config::{OutputFilenames, OutputType};
 use tracing::debug;
 use tracing_subscriber::util::SubscriberInitExt;
 use tracing_subscriber::EnvFilter;
 
+use crate::alloc;
 use crate::expression::Expression;
 use crate::function;
 use crate::header;
@@ -35,7 +36,6 @@ use crate::prefix;
 use crate::structure::{self, CComposite, CStructDef};
 use crate::ty::{CCompositeInfo, CType};
 use crate::write;
-use crate::alloc;
 
 pub struct Context {
     includes: Vec<include::Include>,
@@ -121,7 +121,10 @@ impl Context {
 
         let name = composite.get_name();
 
-        return CCompositeInfo { name, ctx_idx: struct_idx };
+        return CCompositeInfo {
+            name,
+            ctx_idx: struct_idx,
+        };
     }
 
     pub fn get_composite(&self, info: &CCompositeInfo) -> CComposite {
@@ -194,10 +197,12 @@ impl OngoingCodegen {
 
         debug!("Files created: {} {}", c_path.display(), h_path.display());
 
-        self.context.get_mut_c_includes().push(include::Include::new(
-            format!("{}.h", crate_info.local_crate_name.to_string()),
-            false,
-        ));
+        self.context
+            .get_mut_c_includes()
+            .push(include::Include::new(
+                format!("{}.h", crate_info.local_crate_name.to_string()),
+                false,
+            ));
 
         write::write_includes(
             self.context.get_c_includes(),
@@ -264,7 +269,14 @@ fn transpile_cgu<'tcx, 'ccx>(
         match item {
             MonoItem::Fn(inst) => {
                 with_no_trimmed_paths!({
-                    function::handle_fn(tcx, ongoing_codegen, inst.clone(), rust_to_c_map, alloc_to_c_map, item.def_id().krate.as_usize());
+                    function::handle_fn(
+                        tcx,
+                        ongoing_codegen,
+                        inst.clone(),
+                        rust_to_c_map,
+                        alloc_to_c_map,
+                        item.def_id().krate.as_usize(),
+                    );
                 });
             }
             MonoItem::Static(def) => {
@@ -282,7 +294,9 @@ pub fn run<'tcx>(
     metadata: rustc_metadata::EncodedMetadata,
 ) -> Box<(String, OngoingCodegen, EncodedMetadata, CrateInfo)> {
     let cgus: Vec<_> = tcx.collect_and_partition_mono_items(()).1.iter().collect();
-    let mut ongoing_codegen = Box::new(OngoingCodegen { context: Context::new() });
+    let mut ongoing_codegen = Box::new(OngoingCodegen {
+        context: Context::new(),
+    });
     let mut rust_to_c_map: std::collections::HashMap<rustc_middle::ty::Ty<'tcx>, CType> =
         std::collections::HashMap::new();
     let mut alloc_to_c_map: std::collections::HashMap<AllocId, Expression> =
@@ -299,10 +313,21 @@ pub fn run<'tcx>(
     prefix::build_prefix(&mut ongoing_codegen.context);
 
     for cgu in &cgus {
-        transpile_cgu(tcx, cgu, &mut ongoing_codegen, &mut rust_to_c_map, &mut alloc_to_c_map);
+        transpile_cgu(
+            tcx,
+            cgu,
+            &mut ongoing_codegen,
+            &mut rust_to_c_map,
+            &mut alloc_to_c_map,
+        );
     }
 
     let name: String = cgus.iter().next().unwrap().name().to_string();
 
-    Box::new((name, *ongoing_codegen, metadata, CrateInfo::new(tcx, "c".to_string())))
+    Box::new((
+        name,
+        *ongoing_codegen,
+        metadata,
+        CrateInfo::new(tcx, "c".to_string()),
+    ))
 }
