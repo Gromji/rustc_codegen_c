@@ -16,7 +16,7 @@ pub struct RepresentationContext<'ctx> {
 
     var_name: Option<String>,
     pub cur_fn: Option<&'ctx CFunction>,
-    pub n_ptr: u8,
+    n_ptr: u8,
 }
 
 impl RepresentationContext<'_> {
@@ -24,6 +24,16 @@ impl RepresentationContext<'_> {
         self.var_name.take()
     }
 
+    pub fn get_ptr_count(&mut self) -> u8 {
+        let ret = self.n_ptr;
+        self.n_ptr = 0;
+        ret
+    }
+
+    pub fn increment_ptr_count(&mut self) {
+        self.n_ptr += 1;
+    }
+    
     pub fn set_variable_name(&mut self, name: String) {
         self.var_name = Some(name);
     }

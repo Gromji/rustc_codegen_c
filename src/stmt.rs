@@ -7,6 +7,7 @@ use crate::header::handle_checked_op;
 use crate::structure::CTaggedUnionDef;
 use crate::ty::CType;
 use crate::utils;
+use rustc_const_eval::interpret::Provenance;
 use rustc_middle::mir::{
     BinOp, CastKind, ConstOperand, ConstValue, Operand, Place, Rvalue, StatementKind,
 };
@@ -513,10 +514,14 @@ pub fn handle_constant<'tcx, 'ccx>(
         .eval(fn_cx.tcx, ParamEnv::reveal_all(), const_op.span)
         .expect("Constant evaluation failed");
 
-    handle_const_value(&value, &constant.ty())
+    handle_const_value(fn_cx, &value, &constant.ty())
 }
 
-fn handle_const_value<'tcx>(val: &ConstValue, ty: &Ty) -> Expression {
+fn handle_const_value<'tcx, 'ccx>(
+    fn_cx: &CodegenFunctionCx<'tcx, 'ccx>,
+    val: &ConstValue,
+    ty: &Ty,
+) -> Expression {
     let _span = span!(tracing::Level::DEBUG, "handle_const_value").entered();
     debug!("Const value: {:?}, with type: {:?}", val, ty);
 
@@ -552,7 +557,9 @@ fn handle_const_value<'tcx>(val: &ConstValue, ty: &Ty) -> Expression {
                 }
 
                 rustc_middle::ty::TyKind::Str => {
-                    return Expression::Constant { value: format!("\"{}\"", scalar.to_string()) };
+                    return Expression::Constant {
+                        value: format!("\"{}\"", scalar.to_string()),
+                    };
                 }
 
                 _ => {
@@ -563,7 +570,27 @@ fn handle_const_value<'tcx>(val: &ConstValue, ty: &Ty) -> Expression {
                 }
             },
 
-            rustc_const_eval::interpret::Scalar::Ptr(_, _) => todo!("Ptr"),
+            rustc_const_eval::interpret::Scalar::Ptr(ptr, size) => {
+                debug!("Ptr: {:?}, size: {:?}", ptr, size);
+                let alloc_id = ptr.provenance.get_alloc_id().unwrap();
+                let alloc = fn_cx.tcx.global_alloc(alloc_id);
+
+                let const_alloc = alloc.unwrap_memory();
+                let inner = const_alloc.inner();
+                let alloc_bytes: Vec<u8> = inner
+                    .inspect_with_uninit_and_ptr_outside_interpreter(0..inner.len())
+                    .into();
+
+                let byte_data = alloc_bytes
+                    .iter()
+                    .map(|b| format!("\\x{:02x}", b))
+                    .collect::<Vec<String>>()
+                    .join("");
+
+                Expression::Constant {
+                    value: format!("\"{}\"", byte_data),
+                }
+            }
         },
 
         rustc_middle::mir::ConstValue::ZeroSized => {
@@ -589,7 +616,9 @@ fn handle_const_value<'tcx>(val: &ConstValue, ty: &Ty) -> Expression {
                 .join("");
 
             Expression::fatptr(
-                Expression::Constant { value: format!("\"{}\"", byte_data) },
+                Expression::Constant {
+                    value: format!("\"{}\"", byte_data),
+                },
                 Expression::Cast {
                     ty: CType::UInt(crate::ty::CUIntTy::UInt64),
                     value: Box::new(Expression::const_int(*meta as i128)),
