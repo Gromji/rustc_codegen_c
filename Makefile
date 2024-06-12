@@ -35,10 +35,14 @@ test: tests/test_*.rs
 	fi
 
 clean_tests:
-	rm -f ./tests/*.c ./tests/*.h
+	rm -f ./tests/*.c ./tests/*.h ./tests/e2e/*.out ./tests/e2e/*.o
+	rm -f ./tests/e2e/*.c ./tests/e2e/*.h ./tests/e2e/*.out ./tests/e2e/*.o
 
 clean:
 	cargo clean
+
+compile_cargo:
+	RUSTFLAGS="-Zcodegen-backend=./target/release/librustc_codegen_c.so" cargo +nightly build --release
 
 # for convenience sake
 dummy:

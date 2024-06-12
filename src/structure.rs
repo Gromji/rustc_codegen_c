@@ -1,5 +1,7 @@
 use crate::{
-    crepr::{indent, Representable}, definition::CVarDef, ty::CType
+    crepr::{indent, Representable},
+    definition::CVarDef,
+    ty::CType,
 };
 use std::fmt::{self, Debug};
 
@@ -43,9 +45,8 @@ impl CTaggedUnionDef {
 pub enum CComposite {
     Struct(CStructDef),
     Union(CStructDef),
-    TaggedUnion(CTaggedUnionDef)
+    TaggedUnion(CTaggedUnionDef),
 }
-
 
 impl CComposite {
     pub fn get_name(&self) -> String {
@@ -71,7 +72,6 @@ impl CComposite {
     }
 }
 
-
 impl Debug for CComposite {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         self.default_repr(f)
@@ -82,13 +82,12 @@ impl Representable for CComposite {
     fn repr(
         &self,
         f: &mut (dyn fmt::Write),
-        context: &crate::crepr::RepresentationContext,
+        context: &mut crate::crepr::RepresentationContext,
     ) -> std::fmt::Result {
-
         match self {
             CComposite::Struct(s) | CComposite::Union(s) => {
                 write!(f, "typedef ")?;
-                
+
                 match self {
                     CComposite::Struct(_) => write!(f, "struct ")?,
                     CComposite::Union(_) => write!(f, "union ")?,
@@ -104,7 +103,7 @@ impl Representable for CComposite {
 
                 write!(f, "}} {};", s.name)
             }
-            
+
             CComposite::TaggedUnion(t) => {
                 write!(f, "typedef struct  {{\n")?;
 
@@ -117,7 +116,7 @@ impl Representable for CComposite {
                 write!(f, ";\n")?;
 
                 write!(f, "}} {};", t.name)
-            },
+            }
         }
     }
 }

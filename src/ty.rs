@@ -1,4 +1,4 @@
-use crate::crepr::{Representable, RepresentationContext};
+use crate::crepr::Representable;
 use crate::definition::CVarDef;
 use crate::fatptr::FAT_PTR_NAME;
 use crate::function::CodegenFunctionCx;
@@ -48,14 +48,14 @@ impl Representable for CType {
     fn repr(
         &self,
         f: &mut (dyn fmt::Write),
-        context: &crate::crepr::RepresentationContext,
+        context: &mut crate::crepr::RepresentationContext,
     ) -> fmt::Result {
         match self {
             // Custom struct for Rust's Unit type
             CType::Unit => {
                 let ptrs = "*".repeat(context.n_ptr.into());
                 let c_type = format!("__Unit{}", ptrs);
-                match &context.var_name {
+                match context.get_variable_name_option() {
                     Some(name) => write!(f, "{c_type} {name}"),
                     None => write!(f, "{c_type}"),
                 }
@@ -63,7 +63,7 @@ impl Representable for CType {
             CType::Void => {
                 let ptrs = "*".repeat(context.n_ptr.into());
                 let c_type = format!("void{}", ptrs);
-                match &context.var_name {
+                match context.get_variable_name_option() {
                     Some(name) => write!(f, "{c_type} {name}"),
                     None => write!(f, "{c_type}"),
                 }
@@ -71,7 +71,7 @@ impl Representable for CType {
             CType::Bool => {
                 let ptrs = "*".repeat(context.n_ptr.into());
                 let c_type = format!("bool{}", ptrs);
-                match &context.var_name {
+                match context.get_variable_name_option() {
                     Some(name) => write!(f, "{c_type} {name}"),
                     None => write!(f, "{c_type}"),
                 }
@@ -79,7 +79,7 @@ impl Representable for CType {
             CType::Char => {
                 let ptrs = "*".repeat(context.n_ptr.into());
                 let c_type = format!("char32_t{}", ptrs);
-                match &context.var_name {
+                match context.get_variable_name_option() {
                     Some(name) => write!(f, "{c_type} {name}"),
                     None => write!(f, "{c_type}"),
                 }
@@ -87,7 +87,7 @@ impl Representable for CType {
             CType::Int(i) => {
                 let ptrs = "*".repeat(context.n_ptr.into());
                 let c_type = format!("{}{}", i.name_str(), ptrs);
-                match &context.var_name {
+                match context.get_variable_name_option() {
                     Some(name) => write!(f, "{c_type} {name}"),
                     None => write!(f, "{c_type}"),
                 }
@@ -95,7 +95,7 @@ impl Representable for CType {
             CType::UInt(u) => {
                 let ptrs = "*".repeat(context.n_ptr.into());
                 let c_type = format!("{}{}", u.name_str(), ptrs);
-                match &context.var_name {
+                match context.get_variable_name_option() {
                     Some(name) => write!(f, "{c_type} {name}"),
                     None => write!(f, "{c_type}"),
                 }
@@ -103,7 +103,7 @@ impl Representable for CType {
             CType::Float(float) => {
                 let ptrs = "*".repeat(context.n_ptr.into());
                 let c_type = format!("{}{}", float.name_str(), ptrs);
-                match &context.var_name {
+                match context.get_variable_name_option() {
                     Some(name) => write!(f, "{c_type} {name}"),
                     None => write!(f, "{c_type}"),
                 }
@@ -113,7 +113,7 @@ impl Representable for CType {
                 let struct_name = &info.name;
                 let ptrs = "*".repeat(context.n_ptr.into());
                 let c_type = format!("{struct_name}{ptrs}");
-                match &context.var_name {
+                match context.get_variable_name_option() {
                     Some(name) => write!(f, "{c_type} {name}"),
                     None => write!(f, "{c_type}"),
                 }
@@ -122,16 +122,17 @@ impl Representable for CType {
             CType::Enum => {
                 let ptrs = "*".repeat(context.n_ptr.into());
                 let _c_type = format!("enum{}", ptrs);
-                match &context.var_name {
+                match context.get_variable_name_option() {
                     Some(name) => write!(f, "enum {name}"),
                     None => write!(f, "enum"),
                 }
             }
             CType::Pointer(ty) => {
-                let mut child_context: RepresentationContext = (*context).clone();
-                child_context.n_ptr += 1;
-                ty.repr(f, &child_context)
-            },
+                context.n_ptr += 1;
+                ty.repr(f, context)?;
+                context.n_ptr -= 1;
+                Ok(())
+            }
 
             CType::FatPointer => {
                 // remove one pointer level
@@ -145,35 +146,37 @@ impl Representable for CType {
             }
 
             CType::Array(ty, size) => {
-                // Change this later.
-                let child_context: RepresentationContext = Default::default();
-                ty.repr(f, &child_context)?;
+                ty.repr(f, context)?;
+
+                let var_name = match context.get_variable_name_option() {
+                    Some(name) => name,
+                    None => "".to_string(),
+                };
 
                 if context.n_ptr > 0 {
-                    write!(f, "{} {}", "*".repeat(context.n_ptr.into()), context.get_variable_name())
+                    write!(f, "{} {}", "*".repeat(context.n_ptr.into()), var_name)
                 } else if *size as u32 == 0 {
-                    write!(f, " {}[]", context.get_variable_name())
+                    write!(f, "{}[]", var_name)
                 } else {
-                    write!(f, " {}[{}]", context.get_variable_name(), size)
+                    write!(f, "{}[{}]", var_name, size)
                 }
             }
             CType::FunctionPtr(func_info) => {
-                let child_context: RepresentationContext = Default::default();
-                func_info.ret.repr(f, &child_context)?;
-                match &context.var_name {
-                    Some(name) => write!(f, " (*{})(", name)?,
-                    None => write!(f, " (*)(")?,
-                }
-
+                let var_name = match context.get_variable_name_option() {
+                    Some(name) => name,
+                    None => "".to_string(),
+                };
+                func_info.ret.repr(f, context)?;
+                write!(f, " (*{})(", var_name)?;
                 for (i, arg) in func_info.args.iter().enumerate() {
                     if i > 0 {
                         write!(f, ", ")?;
                     }
-                    arg.repr(f, &child_context)?;
+                    arg.repr(f, context)?;
                 }
 
                 if func_info.args.len() == 0 {
-                    CType::Void.repr(f, &child_context)?;
+                    CType::Void.repr(f, context)?;
                 }
                 write!(f, ")")
             }
@@ -328,10 +331,7 @@ pub struct CCompositeInfo {
 
 impl CCompositeInfo {
     pub fn new(name: &String, ctx_idx: usize) -> Self {
-        Self {
-            name: name.clone(),
-            ctx_idx,
-        }
+        Self { name: name.clone(), ctx_idx }
     }
 }
 
@@ -355,11 +355,11 @@ impl<'tcx> CodegenFunctionCx<'tcx, '_> {
         with_no_trimmed_paths!(|| {
             let name = self.tcx.def_path_str_with_args(def, args).replace("::", "__");
 
-            let name = name.replace("<", "_");        
-            let name = name.replace(">", "");        
-            let name = name.replace(",", "_");        
-            let name = name.replace(" ", "_");        
-            let name = name.replace("&", "_");        
+            let name = name.replace("<", "_");
+            let name = name.replace(">", "");
+            let name = name.replace(",", "_");
+            let name = name.replace(" ", "_");
+            let name = name.replace("&", "_");
 
             return name;
         })()
@@ -395,29 +395,30 @@ impl<'tcx> CodegenFunctionCx<'tcx, '_> {
         self.fn_pointer_type_internal(sig, true)
     }
 
-    fn fn_pointer_type_internal(&mut self, sig: &rustc_middle::ty::FnSig<'tcx>, erase_ptr_types: bool) -> CType {
+    fn fn_pointer_type_internal(
+        &mut self,
+        sig: &rustc_middle::ty::FnSig<'tcx>,
+        erase_ptr_types: bool,
+    ) -> CType {
         let inputs: Vec<CType> = sig
-        .inputs()
-        .iter()
-        .map(|ty| self.rust_to_c_type(ty))
-        .map(|ty| {
-            if erase_ptr_types {
-                match ty {
-                    CType::Pointer(_) => CType::Pointer(Box::new(CType::Void)),
-                    _ => ty,
+            .inputs()
+            .iter()
+            .map(|ty| self.rust_to_c_type(ty))
+            .map(|ty| {
+                if erase_ptr_types {
+                    match ty {
+                        CType::Pointer(_) => CType::Pointer(Box::new(CType::Void)),
+                        _ => ty,
+                    }
+                } else {
+                    ty
                 }
-            } else {
-                ty
-            }
-        })
-        .collect();
+            })
+            .collect();
 
         let output = self.rust_to_c_type(&sig.output());
 
-        CType::FunctionPtr(Box::new(CFuncPtrInfo {
-            args: inputs,
-            ret: Box::new(output),
-        }))
+        CType::FunctionPtr(Box::new(CFuncPtrInfo { args: inputs, ret: Box::new(output) }))
     }
 
     fn rust_to_c_type_internal(&mut self, ty: &Ty<'tcx>) -> CType {
@@ -443,10 +444,8 @@ impl<'tcx> CodegenFunctionCx<'tcx, '_> {
                         .collect(),
                 };
 
-                let struct_info = self
-                    .ongoing_codegen
-                    .context
-                    .add_composite(&CComposite::Struct(c_struct));
+                let struct_info =
+                    self.ongoing_codegen.context.add_composite(&CComposite::Struct(c_struct));
 
                 return CType::Struct(struct_info);
             }
@@ -468,10 +467,8 @@ impl<'tcx> CodegenFunctionCx<'tcx, '_> {
                             .collect(),
                     };
 
-                    let struct_info = self
-                        .ongoing_codegen
-                        .context
-                        .add_composite(&CComposite::Struct(c_struct));
+                    let struct_info =
+                        self.ongoing_codegen.context.add_composite(&CComposite::Struct(c_struct));
 
                     return CType::Struct(struct_info);
                 }
@@ -492,10 +489,8 @@ impl<'tcx> CodegenFunctionCx<'tcx, '_> {
                             .collect(),
                     };
 
-                    let struct_info = self
-                        .ongoing_codegen
-                        .context
-                        .add_composite(&CComposite::Union(c_struct));
+                    let struct_info =
+                        self.ongoing_codegen.context.add_composite(&CComposite::Union(c_struct));
 
                     return CType::Union(struct_info);
                 }
@@ -544,10 +539,8 @@ impl<'tcx> CodegenFunctionCx<'tcx, '_> {
                         fields: variant_infos,
                     };
 
-                    let union_info = self
-                        .ongoing_codegen
-                        .context
-                        .add_composite(&CComposite::Union(union_def));
+                    let union_info =
+                        self.ongoing_codegen.context.add_composite(&CComposite::Union(union_def));
 
                     let discr_type = self.rust_to_c_type(&ty.discriminant_ty(self.tcx));
 
@@ -571,9 +564,7 @@ impl<'tcx> CodegenFunctionCx<'tcx, '_> {
                 self.rust_to_c_type(&closure.tupled_upvars_ty())
             }
 
-            rustc_middle::ty::Dynamic(..) => {
-                CType::FatPointer {}
-            }
+            rustc_middle::ty::Dynamic(..) => CType::FatPointer {},
 
             rustc_middle::ty::Ref(_, ty, _) => {
                 ty.is_sized(self.tcx, ParamEnv::reveal_all())
@@ -583,16 +574,13 @@ impl<'tcx> CodegenFunctionCx<'tcx, '_> {
 
             rustc_middle::ty::Slice(ty) => self.rust_to_c_type(ty),
 
-            rustc_middle::ty::Array(ty, size) => CType::Array(
-                Box::new(self.rust_to_c_type(ty)),
-                utils::const_to_usize(size),
-            ),
+            rustc_middle::ty::Array(ty, size) => {
+                CType::Array(Box::new(self.rust_to_c_type(ty)), utils::const_to_usize(size))
+            }
 
             rustc_middle::ty::FnPtr(s) => {
-                let sig = self
-                    .tcx
-                    .normalize_erasing_late_bound_regions(ParamEnv::reveal_all(), *s);
-                
+                let sig = self.tcx.normalize_erasing_late_bound_regions(ParamEnv::reveal_all(), *s);
+
                 self.fn_pointer_type(&sig)
             }
 
@@ -609,12 +597,12 @@ impl<'tcx> From<&Ty<'tcx>> for CType {
             rustc_middle::ty::Bool => CType::Bool,
             rustc_middle::ty::Char => CType::Char,
             rustc_middle::ty::Str => CType::Array(Box::new(CType::Char), 0),
-            rustc_middle::ty::Uint(u) => CType::UInt(CUIntTy::from(
-                u.bit_width().unwrap_or(CUIntTy::DEFAULT_BIT_WIDTH),
-            )),
-            rustc_middle::ty::Int(i) => CType::Int(CIntTy::from(
-                i.bit_width().unwrap_or(CIntTy::DEFAULT_BIT_WIDTH),
-            )),
+            rustc_middle::ty::Uint(u) => {
+                CType::UInt(CUIntTy::from(u.bit_width().unwrap_or(CUIntTy::DEFAULT_BIT_WIDTH)))
+            }
+            rustc_middle::ty::Int(i) => {
+                CType::Int(CIntTy::from(i.bit_width().unwrap_or(CIntTy::DEFAULT_BIT_WIDTH)))
+            }
             rustc_middle::ty::Float(float) => CType::Float(CFloatTy::from(float.bit_width())),
 
             _ => {

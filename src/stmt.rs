@@ -23,29 +23,20 @@ pub struct Statement {
 
 impl Statement {
     pub fn new(expression: Expression, comment: String) -> Self {
-        Self {
-            expression: Some(expression),
-            comment: (Some(comment)),
-        }
+        Self { expression: Some(expression), comment: (Some(comment)) }
     }
 
     pub fn from_expression(expression: Expression) -> Self {
-        Self {
-            expression: Some(expression),
-            comment: None,
-        }
+        Self { expression: Some(expression), comment: None }
     }
 
     pub fn from_comment(comment: String) -> Self {
-        Self {
-            expression: None,
-            comment: Some(comment),
-        }
+        Self { expression: None, comment: Some(comment) }
     }
 }
 
 impl Representable for Statement {
-    fn repr(&self, f: &mut (dyn fmt::Write), context: &RepresentationContext) -> fmt::Result {
+    fn repr(&self, f: &mut (dyn fmt::Write), context: &mut RepresentationContext) -> fmt::Result {
         if context.include_comments {
             if let Some(comment) = &self.comment {
                 indent(f, context)?;
@@ -56,7 +47,11 @@ impl Representable for Statement {
         if let Some(expression) = &self.expression {
             indent(f, context)?;
             expression.repr(f, context)?;
-            write!(f, ";")?;
+
+            if !matches!(expression, Expression::NoOp {}) {
+                write!(f, ";")?;
+            }
+
             if context.include_newline {
                 write!(f, "\n")?;
             }
@@ -83,7 +78,15 @@ pub fn handle_stmt<'tcx, 'ccx>(
     debug!("Kind: {:?}", stmt.kind);
 
     let expression = match &stmt.kind {
-        StatementKind::Assign(val) => handle_assign(fn_cx, c_fn, &val.0, &val.1),
+        StatementKind::Assign(val) => {
+            let exp = handle_assign(fn_cx, c_fn, &val.0, &val.1);
+
+            if let Expression::Assignment { lhs: _, rhs } = &exp {
+                if matches!(**rhs, Expression::NoOp {}) { Expression::NoOp {} } else { exp }
+            } else {
+                exp
+            }
+        }
 
         _ => Expression::NoOp {},
     };
@@ -173,9 +176,7 @@ pub fn handle_place<'tcx, 'ccx>(
 
                         // access the variant
                         let variant_field = &union_def.fields[variant_idx.as_usize()];
-                        access.push(VariableAccess::Field {
-                            name: variant_field.get_name(),
-                        });
+                        access.push(VariableAccess::Field { name: variant_field.get_name() });
 
                         // set ctype to correct variant
                         ctype = variant_field.get_type().clone();
@@ -192,9 +193,9 @@ pub fn handle_place<'tcx, 'ccx>(
                 let next_ctype = fn_cx.rust_to_c_type(&current_ty.builtin_deref(true).unwrap());
 
                 match ctype {
-                    CType::FatPointer => access.push(VariableAccess::FatPtrDereference {
-                        ty: next_ctype.clone(),
-                    }),
+                    CType::FatPointer => {
+                        access.push(VariableAccess::FatPtrDereference { ty: next_ctype.clone() })
+                    }
 
                     _ => {
                         access.push(VariableAccess::Dereference);
@@ -212,10 +213,7 @@ pub fn handle_place<'tcx, 'ccx>(
         }
     }
 
-    return Expression::Variable {
-        local: place.local.as_usize(),
-        access,
-    };
+    return Expression::Variable { local: place.local.as_usize(), access };
 }
 
 pub fn handle_operand<'tcx, 'ccx>(
@@ -237,17 +235,10 @@ pub fn handle_operand_with_access<'tcx, 'ccx>(
 ) -> Expression {
     let mut expression = handle_operand(fn_cx, operand);
 
-    if let Expression::Variable {
-        local,
-        access: old_access,
-    } = expression
-    {
+    if let Expression::Variable { local, access: old_access } = expression {
         let mut new_access = old_access;
         new_access.extend(access);
-        expression = Expression::Variable {
-            local,
-            access: new_access,
-        };
+        expression = Expression::Variable { local, access: new_access };
     } else {
         panic!("Expected variable expression from handle_operand");
     }
@@ -265,16 +256,24 @@ fn handle_cast<'tcx, 'ccx>(
 ) -> Expression {
     let _span = debug_span!("handle_cast").entered();
 
-    debug!(
-        "Assign CAST: {:?}, op: {:?}, target: {:?}",
-        kind, op, target_ty
-    );
+    debug!("Assign CAST: {:?}, op: {:?}, target: {:?}", kind, op, target_ty);
 
     let source_ty = op.ty(&fn_cx.mir.local_decls, fn_cx.tcx);
+    let tgt_ty = fn_cx.rust_to_c_type(target_ty);
 
     match kind {
+        CastKind::IntToInt
+        | CastKind::FloatToInt
+        | CastKind::FloatToFloat
+        | CastKind::IntToFloat => {
+            handle_operand_with_access(fn_cx, op, vec![VariableAccess::Cast { ty: tgt_ty }])
+        }
         CastKind::PointerCoercion(coercion_type) => {
+            let target_kind = target_ty.builtin_deref(true).unwrap().kind();
+            let source_deref_ty = source_ty.builtin_deref(true).unwrap();
+            let _source_ty = fn_cx.ctype_from_cache(&source_deref_ty).unwrap();
             debug!("PointerCoercion: {:?}", coercion_type);
+            debug!("source type: {:?}", source_deref_ty);
 
             let source_deref_ty = source_ty.builtin_deref(true).unwrap();
             let target_kind = target_ty.builtin_deref(true).unwrap().kind();
@@ -354,11 +353,7 @@ fn handle_assign<'tcx, 'ccx>(
                 BinOp::AddWithOverflow | BinOp::SubWithOverflow | BinOp::MulWithOverflow => {
                     handle_checked_op(fn_cx, op.into(), lhs, rhs, &ty, &place_ty)
                 }
-                _ => Expression::BinaryOp {
-                    op: op.into(),
-                    lhs: Box::new(lhs),
-                    rhs: Box::new(rhs),
-                },
+                _ => Expression::BinaryOp { op: op.into(), lhs: Box::new(lhs), rhs: Box::new(rhs) },
             }
         }
         Rvalue::Aggregate(kind, fields) => {
@@ -373,16 +368,17 @@ fn handle_assign<'tcx, 'ccx>(
             if let Expression::Variable { local, access } = place {
                 let mut new_access = access.clone();
                 new_access.push(VariableAccess::Reference);
-                Expression::Variable {
-                    local,
-                    access: new_access,
-                }
+                Expression::Variable { local, access: new_access }
             } else {
                 panic!("Expected place to be a variable");
             }
         }
 
-        Rvalue::Cast(kind, op, target_ty) => handle_cast(fn_cx, rvalue, kind, op, target_ty),
+        Rvalue::Cast(kind, op, target_ty) => {
+            debug!("Assign CAST: {:?} {:?} {:?}", kind, op, target_ty);
+
+            handle_cast(fn_cx, rvalue, kind, op, target_ty)
+        }
 
         Rvalue::CopyForDeref(place) => {
             debug!("Assign COPY FOR DEREF: {:?}", place);
@@ -395,13 +391,9 @@ fn handle_assign<'tcx, 'ccx>(
 
             if let Expression::Variable { local, access } = handle_place(fn_cx, place) {
                 let mut modified_access = access;
-                modified_access.push(VariableAccess::Field {
-                    name: CTaggedUnionDef::TAG_NAME.to_string(),
-                });
-                Expression::Variable {
-                    local,
-                    access: modified_access,
-                }
+                modified_access
+                    .push(VariableAccess::Field { name: CTaggedUnionDef::TAG_NAME.to_string() });
+                Expression::Variable { local, access: modified_access }
             } else {
                 unreachable!("non variable for handle_place")
             }
@@ -510,9 +502,7 @@ fn handle_const_value<'tcx>(val: &ConstValue, ty: &Ty) -> Expression {
 
         rustc_middle::mir::ConstValue::ZeroSized => {
             debug!("Zerosized kind {:?}, val {:?}", ty.kind(), ty);
-            return Expression::Constant {
-                value: ty.to_string(),
-            };
+            return Expression::Constant { value: ty.to_string() };
         }
         _ => {
             warn!("Unhandled constant: {:?}", val);
