@@ -14,7 +14,7 @@ pub struct RepresentationContext<'ctx> {
     pub include_newline: bool,
     pub include_comments: bool,
 
-    pub var_name: Option<String>,
+    var_name: Option<String>,
     pub cur_fn: Option<&'ctx CFunction>,
     pub n_ptr: u8,
 }
@@ -22,6 +22,10 @@ pub struct RepresentationContext<'ctx> {
 impl RepresentationContext<'_> {
     pub fn get_variable_name_option(&mut self) -> Option<String> {
         self.var_name.take()
+    }
+
+    pub fn set_variable_name(&mut self, name: String) {
+        self.var_name = Some(name);
     }
 }
 

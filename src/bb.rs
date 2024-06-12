@@ -211,7 +211,7 @@ fn handle_function_call<'tcx, 'ccx>(
                 }
 
                 _ => {
-                    panic!("Unimplemented function call: {:?}", func);
+                    panic!("Unimplemented constant function call: {:?}", func);
                 }
             };
 
@@ -223,7 +223,19 @@ fn handle_function_call<'tcx, 'ccx>(
 
         _ => {
             //TODO operand handling probably has to be changed to allow for functions as operands
-            panic!("Unimplemented function call: {:?}", func);
+            
+            let fn_call = Expression::FnCall {
+                function: Box::new(handle_operand(fn_cx, &func)),
+                args: args
+                    .iter()
+                    .map(|arg| handle_operand(fn_cx, &arg.node))
+                    .collect(),
+            };
+
+            return Statement::from_expression(Expression::Assignment {
+                lhs: Box::new(destination),
+                rhs: Box::new(fn_call),
+            });
         }
     }
 }
