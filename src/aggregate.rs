@@ -219,10 +219,14 @@ pub fn handle_aggregate<'tcx, 'ccx>(
                 def, closure
             );
 
+            debug!(
+                "Closure has tupled upvars ty: {:?}",
+                closure.tupled_upvars_ty()
+            );
             let closure_arg_struct = fn_cx.rust_to_c_type(&closure.tupled_upvars_ty());
 
             if let CType::Struct(struct_info) = closure_arg_struct {
-                let mut field_expressions = Vec::new();
+                let mut field_expressions: Vec<Expression> = Vec::new();
 
                 for field in fields {
                     let expression = handle_operand(fn_cx, &field);
@@ -242,7 +246,21 @@ pub fn handle_aggregate<'tcx, 'ccx>(
                     rhs: Box::new(rhs),
                 }
             } else {
-                panic!("Expected closure arg struct to be a struct");
+                // unboxed closure, must have a single field
+
+                let lhs = handle_place(fn_cx, place);
+                let rhs = handle_operand(
+                    fn_cx,
+                    fields
+                        .iter()
+                        .next()
+                        .expect("Expected atleast one arguement when closure args unboxed"),
+                );
+
+                Expression::Assignment {
+                    lhs: Box::new(lhs),
+                    rhs: Box::new(rhs),
+                }
             }
         }
 
