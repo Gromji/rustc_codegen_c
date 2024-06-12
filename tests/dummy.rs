@@ -42,6 +42,14 @@ fn main() {
     }
 
     let b = _a;
+    let x = func();
+    let y = test_closure_arr(5, -1);
+    let z = test_closure_ref(&y);
+}
+fn func() -> [u32; 4] {
+    let mut a = [1, 2, 3, 4];
+    a[0] = 5;
+    return a;
 }
 struct Te {
     _a: i32,
@@ -76,7 +84,7 @@ trait TestTrait {
     fn test(&self) -> i32;
 }
 
-impl<T> TestTrait for Pair<i32, T>{
+impl<T> TestTrait for Pair<i32, T> {
     fn test(&self) -> i32 {
         self.first
     }
@@ -127,10 +135,17 @@ fn test_plain_union(a: TestUnion) -> i32 {
 
 fn test() -> i32 {
     let mut t: Te;
-    t = Te { _a: 7, _b: 8, pair: Pair { first: 128, second: true } };
+    t = Te {
+        _a: 7,
+        _b: 8,
+        pair: Pair {
+            first: 128,
+            second: true,
+        },
+    };
     t.pair.first = 10;
     let p: Pair<i32, bool> = Pair::new(128, false);
-    let p2 = Pair::new(false,p.get_second());
+    let p2 = Pair::new(false, p.get_second());
     let k = 5;
     let pair = (128, t);
     let unkonwn = (128, true, 1.0);
@@ -143,6 +158,13 @@ fn test() -> i32 {
 fn test_closure(val1: i32, val2: i32) -> i32 {
     let a = |x: i32| x + val1 + val2;
     return a(5);
+}
+fn test_closure_arr(val1: i32, val2: i32) -> [i32; 3] {
+    let a = |x: i32| [x + val1 + val2, x + val1, x + val1];
+    return a(5);
+}
+fn test_closure_ref(val: &[i32; 3]) -> &[i32; 3] {
+    return val;
 }
 
 fn add_many(x: i32) -> i32 {

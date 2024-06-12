@@ -25,11 +25,13 @@ use std::{any::Any, path::Path};
 use tracing::debug;
 
 mod aggregate;
+mod alloc;
 mod base;
 mod bb;
 mod crepr;
 mod definition;
 mod expression;
+mod fatptr;
 mod function;
 mod header;
 mod include;
@@ -39,8 +41,6 @@ mod structure;
 mod ty;
 mod utils;
 mod write;
-mod alloc;
-mod fatptr;
 
 pub struct CCodegenBackend(());
 
@@ -78,7 +78,10 @@ impl CodegenBackend for CCodegenBackend {
         let (name, mut ongoing_codegen, metadata, crate_info) = *ongoing_codegen
             .downcast::<(String, OngoingCodegen, EncodedMetadata, CrateInfo)>()
             .expect("in join_codegen: ongoing_codegen is not a OngoingCodegen");
-        (ongoing_codegen.join(sess, name, metadata, crate_info, outputs), FxIndexMap::default())
+        (
+            ongoing_codegen.join(sess, name, metadata, crate_info, outputs),
+            FxIndexMap::default(),
+        )
     }
 
     fn link(
@@ -117,7 +120,11 @@ impl CodegenBackend for CCodegenBackend {
 
                 stdout.write_all(c_cont.as_bytes()).unwrap();
 
-                debug!("Files to remove: {} {}", tmp_c_path_.display(), tmp_h_path_.display());
+                debug!(
+                    "Files to remove: {} {}",
+                    tmp_c_path_.display(),
+                    tmp_h_path_.display()
+                );
 
                 // remove tmp_path
                 std::fs::remove_file(tmp_c_path_).unwrap();

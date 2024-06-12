@@ -115,7 +115,7 @@ fn handle_dynamic_dispatch<'tcx, 'ccx>(
         vec![
             VariableAccess::Field {
                 name: FAT_PTR_META_FIELD.to_string(),
-            }, 
+            },
             VariableAccess::Cast {
                 ty: CType::Pointer(Box::new(CType::Pointer(Box::new(CType::Void)))),
             },
