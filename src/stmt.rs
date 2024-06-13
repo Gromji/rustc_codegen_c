@@ -350,17 +350,20 @@ fn handle_cast<'tcx, 'ccx>(
         }
 
         CastKind::Transmute => {
-
             if let CType::FatPointer = tgt_ty {
                 return handle_operand(fn_cx, op);
             }
 
-            return handle_operand_with_access(fn_cx, op, 
+            return handle_operand_with_access(
+                fn_cx,
+                op,
                 vec![
-                    VariableAccess::Reference, 
-                    VariableAccess::Cast { ty: CType::Pointer(Box::new(tgt_ty)) }
-
-            ]);
+                    VariableAccess::Reference,
+                    VariableAccess::Cast {
+                        ty: CType::Pointer(Box::new(tgt_ty)),
+                    },
+                ],
+            );
         }
 
         _ => {
@@ -488,7 +491,18 @@ fn handle_assign<'tcx, 'ccx>(
                 panic!("Rvalue::Len not on slice: {:?}", place);
             }
         }
-
+        Rvalue::Repeat(op, const_count) => {
+            let expr = handle_operand(fn_cx, op);
+            let count = utils::const_to_usize(const_count);
+            return Expression::Repeat {
+                lhs: Box::new(Expression::Variable {
+                    local: place.local.as_usize(),
+                    access: vec![VariableAccess::Unwrap],
+                }),
+                value: Box::new(expr),
+                count,
+            };
+        }
         _ => {
             warn!("Unhandled rvalue: {:?}", rvalue);
             Expression::NoOp {}
@@ -563,7 +577,10 @@ fn handle_const_value<'tcx, 'ccx>(
                 }
 
                 _ => {
-                    warn!("Unhandled scalar kind: {:?} just assuming an int", ty.kind());
+                    warn!(
+                        "Unhandled scalar kind: {:?} just assuming an int",
+                        ty.kind()
+                    );
                     return Expression::Constant {
                         value: format!("{}", utils::scalar_to_u128(&scalar)),
                     };
@@ -620,7 +637,7 @@ fn handle_const_value<'tcx, 'ccx>(
                     value: format!("\"{}\"", byte_data),
                 },
                 Expression::Cast {
-                    ty: CType::UInt(crate::ty::CUIntTy::UInt64),
+                    ty: CType::Pointer(Box::new(CType::Void)),
                     value: Box::new(Expression::const_int(*meta as i128)),
                 },
             )
