@@ -173,6 +173,11 @@ pub enum Expression {
         name: Box<Expression>,
         fields: Vec<Expression>,
     },
+    Repeat {
+        lhs: Box<Expression>,
+        value: Box<Expression>,
+        count: usize,
+    },
 
     /*
        typedef struct {
@@ -405,7 +410,7 @@ impl Representable for Expression {
 
                         VariableAccess::FatPtrDereference { ty } => {
                             let mut ch_ctx = context.clone();
-                            
+
                             // remove any potential names in the ctx
                             let _ = ch_ctx.get_variable_name_option();
 
@@ -458,6 +463,13 @@ impl Representable for Expression {
                     field.repr(f, context)?;
                 }
                 write!(f, " }}")
+            }
+            Expression::Repeat { lhs, value, count } => {
+                write!(f, "for(uint64_t i = 0; i < {}; i++){{", count)?;
+                lhs.repr(f, context)?;
+                write!(f, "[i] = ")?;
+                value.repr(f, context)?;
+                write!(f, ";}}")
             }
 
             Expression::NamedStruct { name, fields } => {

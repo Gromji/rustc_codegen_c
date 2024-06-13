@@ -45,6 +45,7 @@ fn main() {
     let x = func();
     let y = test_closure_arr(5, -1);
     let z = test_closure_ref(&y);
+    let arr = [b; 1542];
 }
 fn func() -> [u32; 4] {
     let mut a = [1, 2, 3, 4];
