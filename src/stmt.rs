@@ -407,6 +407,34 @@ fn handle_assign<'tcx, 'ccx>(
                 },
             }
         }
+
+        Rvalue::UnaryOp(op, operand) => match op {
+            rustc_middle::mir::UnOp::Not => {
+                let ty = operand.ty(&fn_cx.mir.local_decls, fn_cx.tcx);
+                let operand = handle_operand(fn_cx, operand);
+
+                Expression::UnaryOp {
+                    op: match ty.kind() {
+                        TyKind::Bool => crate::expression::UnaryOpType::Not,
+                        _ => crate::expression::UnaryOpType::BitNot,
+                    },
+                    val: Box::new(operand),
+                }
+            }
+
+            rustc_middle::mir::UnOp::Neg => {
+                let operand = handle_operand(fn_cx, operand);
+                Expression::UnaryOp {
+                    op: crate::expression::UnaryOpType::Neg,
+                    val: Box::new(operand),
+                }
+            }
+            _ => {
+                warn!("Unhandled unary op: {:?}", op);
+                Expression::NoOp {}
+            }
+        },
+
         Rvalue::Aggregate(kind, fields) => {
             debug!("Assign AGGREGATE: {:?}", kind);
             // Return instantly because it already handles assignments.
